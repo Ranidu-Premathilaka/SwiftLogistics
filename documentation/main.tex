@@ -4,9 +4,17 @@
 % Essential Packages
 \usepackage[utf8]{inputenc}
 \usepackage[margin=1in]{geometry}
-\usepackage{graphicx}
 \usepackage{hyperref}
 \usepackage{float}
+
+\newif\ifdraft
+\drafttrue 
+
+\ifdraft
+  \usepackage[draft]{graphicx}
+\else
+  \usepackage{graphicx}
+\fi
 
 % Title information
 \title{
