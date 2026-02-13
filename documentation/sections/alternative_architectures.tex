@@ -1,0 +1,103 @@
+\section{Alternative Architectures}
+\label{sec:alternatives}
+
+% Discussion of two alternative architectures that could solve the problem
+
+\subsection{Alternative 1: Monolithic ESB-Centric Architecture}
+\label{subsec:alt1}
+% Description of a traditional ESB-based approach
+% All integration logic centralized in ESB
+
+\subsubsection{Overview}
+% High-level description
+% Main components and structure
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/alternative1_architecture.pdf}
+    \caption{Alternative Architecture 1: ESB-Centric Approach}
+    \label{fig:alt1}
+\end{figure}
+
+\subsubsection{Advantages}
+% Benefits of this approach:
+%   - Centralized orchestration
+%   - Simplified monitoring
+%   - Strong transaction management
+
+\subsubsection{Disadvantages}
+% Drawbacks:
+%   - Single point of failure
+%   - Scalability limitations
+%   - Tight coupling
+%   - ESB becomes bottleneck
+
+\subsubsection{Why Not Chosen}
+% Specific reasons this was not selected for SwiftLogistics
+% Doesn't meet scalability requirements
+% Risk of ESB bottleneck during high-volume events
+
+\subsection{Alternative 2: Point-to-Point Integration Architecture}
+\label{subsec:alt2}
+% Description of direct integration between systems
+% No central middleware layer
+
+\subsubsection{Overview}
+% High-level description
+% Direct connections between systems
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/alternative2_architecture.pdf}
+    \caption{Alternative Architecture 2: Point-to-Point Integration}
+    \label{fig:alt2}
+\end{figure}
+
+\subsubsection{Advantages}
+% Benefits:
+%   - Simple initial implementation
+%   - Low latency
+%   - No central infrastructure needed
+
+\subsubsection{Disadvantages}
+% Drawbacks:
+%   - Integration complexity grows exponentially
+%   - Difficult to maintain
+%   - No centralized monitoring
+%   - Tight coupling between systems
+%   - No standardized error handling
+
+\subsubsection{Why Not Chosen}
+% Poor maintainability
+% Doesn't scale with business growth
+% Lacks flexibility for adding new systems
+
+\subsection{Comparative Analysis}
+\label{subsec:comparison}
+% Table comparing all three architectures across key criteria
+
+\begin{table}[H]
+    \centering
+    \caption{Comparison of Architecture Approaches}
+    \label{tab:arch_comparison}
+    \begin{tabular}{|l|c|c|c|}
+        \hline
+        \textbf{Criteria} & \textbf{Proposed} & \textbf{ESB-Centric} & \textbf{Point-to-Point} \\
+        \hline
+        Scalability & & & \\
+        \hline
+        Maintainability & & & \\
+        \hline
+        Flexibility & & & \\
+        \hline
+        Resilience & & & \\
+        \hline
+        Performance & & & \\
+        \hline
+        Complexity & & & \\
+        \hline
+    \end{tabular}
+\end{table}
+
+% Detailed discussion of comparison results
+% Why proposed architecture best meets requirements

@@ -1,0 +1,230 @@
+\section{Addressing Architectural Challenges}
+\label{sec:challenges}
+
+% Detailed discussion of how each challenge is addressed
+
+\subsection{Overview}
+% Brief recap of challenges from assignment
+% How architecture addresses each challenge
+
+\subsection{Challenge 1: Heterogeneous Systems Integration}
+\label{subsec:challenge1}
+
+\subsubsection{Problem Description}
+% CMS (SOAP/XML), ROS (REST/JSON), WMS (TCP/IP proprietary)
+% Protocol and data format differences
+% Integration complexity
+
+\subsubsection{Solution Approach}
+% Adapter pattern implementation
+% Message translator pattern
+% Protocol translation mechanisms
+% Data format transformation
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/heterogeneous_integration.pdf}
+    \caption{Heterogeneous Systems Integration Solution}
+    \label{fig:hetero_integration}
+\end{figure}
+
+\subsubsection{Implementation Details}
+% CMS Adapter: SOAP client libraries
+% ROS Adapter: REST client with JSON parsing
+% WMS Adapter: Custom TCP/IP socket implementation
+% Unified internal message format
+
+\subsubsection{Benefits Achieved}
+% Loose coupling between systems
+% Flexibility to add new systems
+% Centralized translation logic
+
+\subsection{Challenge 2: Real-time Tracking and Notifications}
+\label{subsec:challenge2}
+
+\subsubsection{Problem Description}
+% Immediate updates when driver marks package delivered
+% Real-time route changes to drivers
+% Push notifications requirement
+
+\subsubsection{Solution Approach}
+% Event-driven architecture
+% WebSocket connections for real-time updates
+% Publish-subscribe pattern for event broadcasting
+% Push notification service integration
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/realtime_solution.pdf}
+    \caption{Real-time Tracking Solution Architecture}
+    \label{fig:realtime_solution}
+\end{figure}
+
+\subsubsection{Implementation Details}
+% WebSocket server in API Gateway
+% Event publishers in each service
+% Subscriber clients (portal and mobile app)
+% Message broker for event distribution
+
+\subsubsection{Benefits Achieved}
+% Immediate status updates
+% Improved user experience
+% Reduced polling overhead
+
+\subsection{Challenge 3: High-Volume Asynchronous Processing}
+\label{subsec:challenge3}
+
+\subsubsection{Problem Description}
+% Order spikes during sales events
+% Time-consuming operations (route optimization)
+% Non-blocking requirement for client portal
+
+\subsubsection{Solution Approach}
+% Message broker for asynchronous communication
+% Queue-based processing
+% Competing consumers pattern
+% Load balancing across service instances
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/async_processing.pdf}
+    \caption{Asynchronous Processing Architecture}
+    \label{fig:async_processing}
+\end{figure}
+
+\subsubsection{Implementation Details}
+% Message queues for order processing
+% Worker services consuming from queues
+% Auto-scaling based on queue depth
+% Backpressure handling
+
+\subsubsection{Benefits Achieved}
+% Responsive UI during high load
+% Horizontal scalability
+% System stability under load
+
+\subsection{Challenge 4: Transaction Management}
+\label{subsec:challenge4}
+
+\subsubsection{Problem Description}
+% Distributed transaction across CMS, WMS, ROS
+% Ensuring consistency
+% Handling partial failures
+% Recovery mechanisms
+
+\subsubsection{Solution Approach}
+% Saga pattern for distributed transactions
+% Compensating transactions
+% Event sourcing for audit trail
+% Idempotent operations
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/transaction_management.pdf}
+    \caption{Distributed Transaction Management with Saga Pattern}
+    \label{fig:transaction_mgmt}
+\end{figure}
+
+\subsubsection{Implementation Details}
+% Saga orchestrator service
+% Compensation handlers for rollback
+% Transaction state machine
+% Step-by-step transaction flow:
+%   1. Order received
+%   2. CMS creates order record
+%   3. WMS reserves package slot
+%   4. ROS adds to route
+%   5. All steps committed or compensated
+
+\subsubsection{Recovery Scenarios}
+% Scenario 1: CMS failure (no compensation needed)
+% Scenario 2: WMS failure (compensate CMS)
+% Scenario 3: ROS failure (compensate WMS and CMS)
+% Scenario 4: Network partition handling
+
+\subsubsection{Benefits Achieved}
+% Eventual consistency
+% No lost orders
+% Graceful failure handling
+% Audit trail for all transactions
+
+\subsection{Challenge 5: Scalability and Resilience}
+\label{subsec:challenge5}
+
+\subsubsection{Problem Description}
+% Growing number of clients, drivers, deliveries
+% Component failures inevitable
+% Need for system to self-heal
+
+\subsubsection{Solution Approach}
+% Microservices for independent scaling
+% Containerization and orchestration
+% Health checks and auto-restart
+% Circuit breaker pattern
+% Load balancing
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/scalability_resilience.pdf}
+    \caption{Scalability and Resilience Architecture}
+    \label{fig:scalability}
+\end{figure}
+
+\subsubsection{Implementation Details}
+% Kubernetes for container orchestration
+% Horizontal Pod Autoscaler (HPA)
+% Service mesh for traffic management
+% Circuit breakers with Hystrix/Resilience4j
+% Retry policies and timeouts
+% Bulkhead pattern for resource isolation
+
+\subsubsection{Benefits Achieved}
+% Independent component scaling
+% Auto-recovery from failures
+% Graceful degradation
+% High availability
+
+\subsection{Challenge 6: Security}
+\label{subsec:challenge6}
+
+\subsubsection{Problem Description}
+% Secure communication requirements
+% Protection of sensitive data
+% External API security (ROS)
+
+\subsubsection{Solution Approach}
+% Detailed in Section~\ref{sec:security}
+% TLS for all communications
+% Authentication and authorization
+% API Gateway security features
+
+\subsubsection{Benefits Achieved}
+% Secure data transmission
+% Controlled access
+% Protected external integrations
+
+\subsection{Summary}
+% Table summarizing challenge-solution mapping
+
+\begin{table}[H]
+    \centering
+    \caption{Challenge-Solution Mapping}
+    \label{tab:challenge_solution}
+    \begin{tabular}{|p{4cm}|p{5cm}|p{5cm}|}
+        \hline
+        \textbf{Challenge} & \textbf{Solution} & \textbf{Key Pattern/Technology} \\
+        \hline
+        Heterogeneous Integration & Adapter services & Message Translator Pattern \\
+        \hline
+        Real-time Updates & Event-driven architecture & Pub-Sub Pattern, WebSocket \\
+        \hline
+        High-Volume Processing & Asynchronous messaging & Message Broker, Queues \\
+        \hline
+        Transaction Management & Saga pattern & Compensating Transactions \\
+        \hline
+        Scalability & Microservices & Kubernetes, Auto-scaling \\
+        \hline
+        Security & Multiple layers & TLS, OAuth, API Gateway \\
+        \hline
+    \end{tabular}
+\end{table}

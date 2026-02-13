@@ -1,0 +1,155 @@
+\section{Architectural and Integration Patterns}
+\label{sec:patterns}
+
+% Description of patterns used in the solution
+
+\subsection{Architectural Patterns}
+\label{subsec:arch_patterns}
+% Main architectural patterns employed
+
+\subsubsection{Microservices Architecture}
+% Description of microservices pattern
+% How it's applied in SwiftLogistics
+% Benefits for scalability and maintainability
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{figures/microservices_pattern.pdf}
+    \caption{Microservices Architecture Pattern}
+    \label{fig:microservices}
+\end{figure}
+
+\subsubsection{Event-Driven Architecture}
+% Description of event-driven pattern
+% Event sourcing and CQRS if applicable
+% How events flow through the system
+% Benefits for real-time updates
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{figures/event_driven_pattern.pdf}
+    \caption{Event-Driven Architecture Pattern}
+    \label{fig:event_driven}
+\end{figure}
+
+\subsubsection{API Gateway Pattern}
+% Single entry point for clients
+% Request routing and aggregation
+% Cross-cutting concerns (auth, logging, rate limiting)
+
+\subsubsection{Service Mesh Pattern}
+% Service-to-service communication management
+% Technologies: Istio/Linkerd
+% Benefits for observability and security
+
+\subsection{Integration Patterns}
+\label{subsec:integration_patterns}
+% Enterprise integration patterns used
+
+\subsubsection{Message Channel}
+% Point-to-point and publish-subscribe channels
+% How messages flow through channels
+% Channel types in SwiftLogistics
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{figures/message_channel_pattern.pdf}
+    \caption{Message Channel Pattern}
+    \label{fig:message_channel}
+\end{figure}
+
+\subsubsection{Message Translator}
+% Protocol translation (SOAP/REST/TCP-IP)
+% Data format transformation (XML/JSON/Binary)
+% Adapter implementations
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{figures/message_translator_pattern.pdf}
+    \caption{Message Translator Pattern}
+    \label{fig:translator}
+\end{figure}
+
+\subsubsection{Content-Based Router}
+% Routing messages based on content
+% Decision logic for message routing
+% Implementation in message broker
+
+\subsubsection{Request-Reply Pattern}
+% Synchronous communication pattern
+% Used for critical operations
+% Correlation identifiers
+
+\subsubsection{Publish-Subscribe Pattern}
+% Real-time updates distribution
+% Event broadcasting to multiple consumers
+% Used for driver notifications and client updates
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{figures/pubsub_pattern.pdf}
+    \caption{Publish-Subscribe Pattern}
+    \label{fig:pubsub}
+\end{figure}
+
+\subsubsection{Competing Consumers}
+% Load distribution across multiple instances
+% High-volume order processing
+% Scalability benefits
+
+\subsubsection{Dead Letter Channel}
+% Handling failed messages
+% Retry mechanisms
+% Error recovery
+
+\subsubsection{Saga Pattern}
+% Distributed transaction management
+% Compensation mechanisms
+% Order processing saga example
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/saga_pattern.pdf}
+    \caption{Saga Pattern for Distributed Transactions}
+    \label{fig:saga}
+\end{figure}
+
+\subsection{Pattern Interaction and Composition}
+\label{subsec:pattern_composition}
+% How patterns work together
+% Example scenarios showing multiple patterns
+
+\subsubsection{Order Submission Flow}
+% Sequence diagram showing pattern interaction
+% From client submission to all systems updated
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/order_flow_sequence.pdf}
+    \caption{Order Submission Sequence Diagram}
+    \label{fig:order_sequence}
+\end{figure}
+
+\subsubsection{Real-time Update Flow}
+% Pattern composition for real-time tracking
+% Event propagation from driver app to client portal
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/realtime_update_sequence.pdf}
+    \caption{Real-time Update Sequence Diagram}
+    \label{fig:realtime_sequence}
+\end{figure}
+
+\subsection{Rationale for Pattern Selection}
+\label{subsec:pattern_rationale}
+% Why these specific patterns were chosen
+% How they address the architectural challenges:
+%   - Heterogeneous systems integration
+%   - Real-time tracking and notifications
+%   - High-volume asynchronous processing
+%   - Transaction management
+%   - Scalability and resilience
+%   - Security
+
+% Justification with reference to requirements from Section~\ref{sec:introduction}

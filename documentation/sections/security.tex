@@ -1,0 +1,143 @@
+\section{Information Security Considerations}
+\label{sec:security}
+
+% Comprehensive security discussion
+
+\subsection{Security Requirements}
+\label{subsec:security_requirements}
+% Security requirements from the assignment
+% Threats and vulnerabilities to address
+% Compliance considerations
+
+\subsection{Authentication and Authorization}
+\label{subsec:auth}
+
+\subsubsection{User Authentication}
+% OAuth 2.0 / OpenID Connect implementation
+% JWT (JSON Web Tokens) for session management
+% Multi-factor authentication considerations
+% Password policies and storage (bcrypt/scrypt)
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{figures/authentication_flow.pdf}
+    \caption{Authentication Flow Diagram}
+    \label{fig:auth_flow}
+\end{figure}
+
+\subsubsection{Service-to-Service Authentication}
+% API keys and secrets management
+% Mutual TLS (mTLS) for service authentication
+% Service mesh security features
+
+\subsubsection{Role-Based Access Control (RBAC)}
+% User roles: Admin, Client, Driver
+% Permission management
+% Authorization at API Gateway level
+
+\subsection{Data Encryption}
+\label{subsec:encryption}
+
+\subsubsection{Data in Transit}
+% TLS 1.3 for all communications
+% HTTPS for web and mobile apps
+% Encrypted message broker connections
+% Certificate management
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/encryption_diagram.pdf}
+    \caption{Data Encryption Architecture}
+    \label{fig:encryption}
+\end{figure}
+
+\subsubsection{Data at Rest}
+% Database encryption
+% Encrypted storage for sensitive data
+% Key management strategies
+
+\subsection{API Security}
+\label{subsec:api_security}
+
+\subsubsection{API Gateway Security}
+% Rate limiting to prevent DoS attacks
+% Request validation and sanitization
+% API versioning and deprecation
+% CORS (Cross-Origin Resource Sharing) policies
+
+\subsubsection{Input Validation}
+% Prevention of injection attacks (SQL, NoSQL, Command)
+% XSS (Cross-Site Scripting) protection
+% CSRF (Cross-Site Request Forgery) tokens
+% Data sanitization
+
+\subsection{Message Security}
+\label{subsec:message_security}
+% Message signing and verification
+% Message encryption in broker
+% Secure message handling patterns
+% Prevention of message tampering
+
+\subsection{Network Security}
+\label{subsec:network_security}
+
+\subsubsection{Network Segmentation}
+% DMZ architecture
+% Internal vs external networks
+% Firewall rules
+% VPN for remote access
+
+\subsubsection{Container Security}
+% Docker security best practices
+% Image scanning for vulnerabilities
+% Runtime security
+% Kubernetes security policies
+
+\subsection{Logging and Monitoring}
+\label{subsec:security_monitoring}
+% Security event logging
+% Audit trails for critical operations
+% Real-time security monitoring
+% Intrusion detection
+% Log aggregation and analysis
+
+\subsection{Secrets Management}
+\label{subsec:secrets}
+% Environment variables for configuration
+% Secret management tools (Vault, Kubernetes Secrets)
+% Database credentials rotation
+% API key management
+
+\subsection{Third-Party Integration Security}
+\label{subsec:third_party_security}
+% Secure communication with ROS (external API)
+% API key protection
+% Request signing
+% Webhook verification
+
+\subsection{Resilience and Availability}
+\label{subsec:resilience_security}
+% Protection against DoS/DDoS attacks
+% Circuit breaker pattern for fault isolation
+% Rate limiting and throttling
+% Backup and disaster recovery
+
+\subsection{Compliance and Standards}
+\label{subsec:compliance}
+% Relevant security standards
+% Data privacy regulations (GDPR-like considerations)
+% PCI DSS if handling payment information
+% Security best practices followed
+
+\subsection{Security Testing}
+\label{subsec:security_testing}
+% Penetration testing approach
+% Vulnerability scanning
+% Security code review
+% OWASP Top 10 mitigation
+
+\subsection{Security Implementation in Prototype}
+\label{subsec:security_prototype}
+% Which security features were implemented in prototype
+% Simplified security measures
+% Production security recommendations
