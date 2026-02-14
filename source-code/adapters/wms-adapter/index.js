@@ -28,3 +28,35 @@
  * @returns {Promise<void>} Promise that resolves when the item is marked as received
  * 
  */
+
+const axios = require("axios");
+class WMSAdapter {
+    constructor({ url, port }) {
+        this.baseUrl = `http://${url}:${port}`;
+    }
+
+    async itemInStock(itemId) {
+        const response = await axios.get(`${this.baseUrl}/stock/${itemId}`);
+        return response.data.inStock;
+    }
+
+    async itemOrder(itemId, quantity) {
+        const response = await axios.post(`${this.baseUrl}/order`, { itemId, quantity });
+        return response.data.trackingId;
+    }
+
+    async itemStatus(trackingId) {
+        const response = await axios.get(`${this.baseUrl}/status/${trackingId}`);
+        return response.data.status;
+    }
+
+    async updateItemStatus(trackingId, status) {
+        await axios.put(`${this.baseUrl}/status/${trackingId}`, { status });
+    }
+
+    async itemReceived(trackingId, signatureUrl) {
+        await axios.post(`${this.baseUrl}/received`, { trackingId, signatureUrl });
+    }
+}
+
+module.exports = WMSAdapter;
