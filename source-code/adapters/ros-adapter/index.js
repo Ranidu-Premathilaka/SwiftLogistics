@@ -10,3 +10,23 @@
  * @returns {Promise} - A promise that resolves to the optimized route
  *
  */
+
+const axios = require("axios");
+class ROSAdapter {
+    constructor() {
+        this.baseUrl = "http://localhost:9000/api/ros"; // Base URL for the ROS API
+    }
+    getOptimalRoute(origin, waypoints) {
+        return axios.post(`${this.baseUrl}/optimize-route`, {
+            origin,
+            waypoints,
+        })
+        .then(response => response.data)
+        .catch(error => {
+            console.error("Error fetching optimal route:", error);
+            throw error;
+        });
+    }
+}
+
+module.exports = ROSAdapter;
