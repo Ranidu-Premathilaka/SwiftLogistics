@@ -35,143 +35,80 @@
  *
  */
 
-const xml2js = require("xml2js");
-const axios = require("axios");
+const soap = require("soap");
 
 class CMSAdapter {
   #baseUrl;
+  #CMSClient;
 
   constructor({ url, port }) {
     this.#baseUrl = `${url}:${port}`;
+    this.#CMSClient = null;
   }
 
-  /**Converts XML -> JS Object */
-  async #parseXML(xml) {
-    const parser = new xml2js.Parser({ explicitArray: false });
-    return parser.parseStringPromise(xml);
+  /** Initialize SOAP client (must be called before using adapter) */
+  async init() {
+    // Create SOAP client using WSDL
+    this.#CMSClient = await soap.createClientAsync(this.#baseUrl + "/wsdl?wsdl");
   }
 
-  async #sendSOAPRequest(action, bodyXML) {
-    const envelope = `
-      <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
-        <soapenv:Header/>
-        <soapenv:Body>
-          ${bodyXML}
-        </soapenv:Body>
-      </soapenv:Envelope>
-    `;
+  /** Send SOAP request using node-soap client */
+  async #sendSOAPRequest(action, args) {
+    if (!this.#CMSClient) {
+      throw new Error("CMSClient not initialized. Call init() first.");
+    }
 
     try {
-      const response = await axios.post(this.#baseUrl, envelope, {
-        headers: {
-          "Content-Type": "text/xml",
-          SOAPAction: action,
-        },
-        timeout: 5000,
-      });
+      // node-soap generates async methods automatically
+      const methodName = action + "Async"; // e.g., "AuthenticateClient" -> "AuthenticateClientAsync"
+      if (typeof this.#CMSClient[methodName] !== "function") {
+        throw new Error(`SOAP method ${methodName} not found in WSDL`);
+      }
 
-      return await this.#parseXML(response.data);
-    } catch (error) {
-      throw new Error("CMS SOAP request failed");
+      const [result] = await this.#CMSClient[methodName](args); // returns array with result
+      return result;
+    } catch (err) {
+      throw new Error(`SOAP request failed: ${err.message}`);
     }
   }
 
-  #extractBody(parsedXML) {
-    return parsedXML["soapenv:Envelope"]["soapenv:Body"];
-  }
+  /** Public methods */
 
   async clientAuthenticate(clientId, clientSecret) {
-    const bodyXML = `
-      <AuthenticateClientRequest>
-        <clientId>${clientId}</clientId>
-        <clientSecret>${clientSecret}</clientSecret>
-      </AuthenticateClientRequest>
-    `;
-    const response = await this.#sendSOAPRequest("AuthenticateClient", bodyXML);
-    const body = this.#extractBody(response);
-    return body.AuthenticateClientResponse;
+    const args = { clientId, clientSecret };
+    const response = await this.#sendSOAPRequest("AuthenticateClient", args);
+    return response.AuthenticateClientResponse;
   }
+
   async getClientOrderID(clientId) {
-    const bodyXML = `
-      <GetClientOrdersRequest>
-        <clientId>${clientId}</clientId>
-      </GetClientOrdersRequest>
-    `;
-    const response = await this.#sendSOAPRequest("GetClientOrders", bodyXML);
-    const body = this.#extractBody(response);
-    return body.GetClientOrdersResponse.orders;
+    const args = { clientId };
+    const response = await this.#sendSOAPRequest("GetClientOrders", args);
+    return response.GetClientOrdersResponse.orders;
   }
+
   async getOrderInfo(orderId) {
-    const bodyXML = `
-      <GetOrderInfoRequest>
-        <orderId>${orderId}</orderId>
-      </GetOrderInfoRequest>
-    `;
-    const response = await this.#sendSOAPRequest("GetOrderInfo", bodyXML);
-    const body = this.#extractBody(response);
-    return body.GetOrderInfoResponse.order;
+    const args = { orderId };
+    const response = await this.#sendSOAPRequest("GetOrderInfo", args);
+    return response.GetOrderInfoResponse.order;
   }
+
   async createOrder(orderData, transactionInfo) {
-    const bodyXML = `
-      <CreateOrderRequest>
-        <orderData>${JSON.stringify(orderData)}</orderData>
-        <transactionInfo>${JSON.stringify(transactionInfo)}</transactionInfo>
-      </CreateOrderRequest>
-    `;
-    const response = await this.#sendSOAPRequest("CreateOrder", bodyXML);
-    const body = this.#extractBody(response);
-    return body.CreateOrderResponse.success;
+    const args = { orderData, transactionInfo };
+    const response = await this.#sendSOAPRequest("CreateOrder", args);
+    return response.CreateOrderResponse.success;
   }
+
   async updateOrder(orderId, updateData) {
-    const bodyXML = `
-      <UpdateOrderRequest>
-        <orderId>${orderId}</orderId>
-        <updateData>${JSON.stringify(updateData)}</updateData>
-      </UpdateOrderRequest>
-    `;
-    const response = await this.#sendSOAPRequest("UpdateOrder", bodyXML);
-    const body = this.#extractBody(response);
-    return body.UpdateOrderResponse.updatedOrder;
+    const args = { orderId, updateData };
+    const response = await this.#sendSOAPRequest("UpdateOrder", args);
+    return response.UpdateOrderResponse.updatedOrder;
   }
+
   async deleteOrder(orderId) {
-    const bodyXML = `
-      <DeleteOrderRequest>
-        <orderId>${orderId}</orderId>
-      </DeleteOrderRequest>
-    `;
-    const response = await this.#sendSOAPRequest("DeleteOrder", bodyXML);
-    const body = this.#extractBody(response);
-    return body.DeleteOrderResponse.success;
+    const args = { orderId };
+    const response = await this.#sendSOAPRequest("DeleteOrder", args);
+    return response.DeleteOrderResponse.success;
   }
 }
 
-// function startConnection(){
-//     config = loadConfig();
-//     cmsDeployedUrl = config.cmsUrl;
-//     cmsDeployedPort = config.cmsPort;
-
-//     // Connection to the CMS system using the deployed URL and port
-
-// }
-
-// function createOrder(orderData, transactionInfo, callback){
-//     SOAP slfkjsflkj;
-//     slfkjas->slfaskdfj
-//     lskfj
-
-//     CMSModule.createOrder(orderData, transactionInfo, function(err, result){
-//         if(err){
-//             return callback(err);
-//         }
-//         callback(null, result);
-//     });
-
-// }
-
-// function createOrder(orderData, transactionInfo, callback){
-
-//     // Validation
-//     // DB logic
-
-//     //callback
-// }
+module.exports = CMSAdapter;
