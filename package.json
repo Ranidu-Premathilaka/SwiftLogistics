@@ -1,24 +1,6 @@
 {
-  "name": "swiftlogistics",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Ranidu-Premathilaka/SwiftLogistics.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/Ranidu-Premathilaka/SwiftLogistics/issues"
-  },
-  "homepage": "https://github.com/Ranidu-Premathilaka/SwiftLogistics#readme",
   "dependencies": {
+    "amqplib": "^0.10.9",
     "soap": "^1.6.5"
   }
 }

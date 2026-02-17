@@ -1,0 +1,8 @@
+{
+  "name": "cms",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+    "soap": "^0.44.0"
+  }
+}

@@ -50,6 +50,8 @@ class CMSAdapter {
   async init() {
     // Create SOAP client using WSDL
     this.#CMSClient = await soap.createClientAsync(this.#baseUrl + "/wsdl?wsdl");
+    // Override the endpoint to use the correct URL (in case WSDL has a different one)
+    this.#CMSClient.setEndpoint(this.#baseUrl + "/wsdl");
   }
 
   /** Send SOAP request using node-soap client */
@@ -68,7 +70,8 @@ class CMSAdapter {
       const [result] = await this.#CMSClient[methodName](args); // returns array with result
       return result;
     } catch (err) {
-      throw new Error(`SOAP request failed: ${err.message}`);
+      console.error("SOAP Error details:", err);
+      throw new Error(`SOAP request failed: ${err.message || JSON.stringify(err)}`);
     }
   }
 

@@ -8,8 +8,7 @@
  */
 
 const http = require("http");
-
-const PORT = 9000;
+const { port } = require("./config");
 
 /**
  * Fake route-optimization logic.
@@ -74,6 +73,6 @@ const server = http.createServer(async (req, res) => {
   res.end(JSON.stringify({ error: "Not found" }));
 });
 
-server.listen(PORT, () => {
-  console.log(`Mock ROS service listening on http://localhost:${PORT}`);
+server.listen(port, () => {
+  console.log(`Mock ROS service listening on http://localhost:${port}`);
 });

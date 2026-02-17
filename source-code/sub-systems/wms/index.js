@@ -14,7 +14,7 @@
 const http = require("http");
 const crypto = require("crypto");
 
-const PORT = 7000;
+const { port } = require("./config");
 
 // ── In-memory mock data ────────────────────────────────────────
 const stockLevels = {
@@ -135,6 +135,6 @@ const server = http.createServer(async (req, res) => {
   json(res, 404, { error: "Not found" });
 });
 
-server.listen(PORT, () => {
-  console.log(`Mock WMS service listening on http://localhost:${PORT}`);
+server.listen(port, () => {
+  console.log(`Mock WMS service listening on http://localhost:${port}`);
 });

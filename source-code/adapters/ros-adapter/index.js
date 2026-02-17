@@ -13,8 +13,9 @@
 
 const axios = require("axios");
 class ROSAdapter {
-    constructor() {
-        this.baseUrl = "http://localhost:9000/api/ros"; // Base URL for the ROS API
+    constructor({ url, port } = {}) {
+        const baseUrl = url && port ? `http://${url}:${port}` : "http://localhost:9000";
+        this.baseUrl = `${baseUrl}/api/ros`; // Base URL for the ROS API
     }
     getOptimalRoute(origin, waypoints) {
         return axios.post(`${this.baseUrl}/optimize-route`, {

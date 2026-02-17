@@ -1,0 +1,39 @@
+version: '3.8'
+services:
+  cms:
+    build: ./source-code/sub-systems/cms
+    container_name: cms-service
+    ports:
+      - "3001:3000"
+    restart: unless-stopped
+    working_dir: /app
+  rms:
+    build: ./source-code/sub-systems/rms
+    container_name: rms-service
+    ports:
+      - "3002:3000"
+    restart: unless-stopped
+    working_dir: /app
+  wms:
+    build: ./source-code/sub-systems/wms
+    container_name: wms-service
+    ports:
+      - "3003:3000"
+    restart: unless-stopped
+    working_dir: /app
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: rabbitmq-service
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    restart: unless-stopped
+
+  order-service:
+    build: ./source-code/services/order-service
+    container_name: order-service
+    environment:
+      - RABBITMQ_URL=amqp://rabbitmq
+    depends_on:
+      - rabbitmq
+    restart: unless-stopped

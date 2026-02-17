@@ -9,6 +9,7 @@
  */
 const http = require("http");
 const soap = require("soap");
+const { port } = require("./config");
 
 // 1️⃣ Define your service (fake implementation)
 const cmsService = {
@@ -196,7 +197,7 @@ const wsdlXml = `
 
   <service name="CMSService">
     <port name="CMSPort" binding="tns:CMSBinding">
-      <soap:address location="http://localhost:8000/wsdl"/>
+      <soap:address location="/wsdl"/>
     </port>
   </service>
 </definitions>
@@ -208,8 +209,8 @@ const server = http.createServer((req, res) => {
   res.end("Not found");
 });
 
-server.listen(8000, async () => {
-  console.log("Mock CMS SOAP server listening on http://localhost:8000/wsdl");
+server.listen(port, async () => {
+  console.log(`Mock CMS SOAP server listening on http://localhost:${port}/wsdl`);
   soap.listen(server, "/wsdl", cmsService, wsdlXml);
 });
 
