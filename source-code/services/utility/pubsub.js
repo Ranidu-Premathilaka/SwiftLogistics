@@ -1,10 +1,11 @@
 const amqp = require('amqplib');
 
 class PubSub {
-    constructor(url, exchange) {
+    constructor(url, exchange, queue) {
         this.connection = null;
         this.channel = null;
         this.exchange = exchange;
+        this.queue = queue;
         this.url = url;
         this.explicitClose = false;
         this.subscribers = []; 
@@ -42,7 +43,7 @@ class PubSub {
     async #init() {
         await this.channel.assertExchange(this.exchange, 'topic', { durable: true });
         this.subscribers.forEach(sub => {
-            this.subscribe(sub.routingKey, sub.queue, sub.callback, true);
+            this.subscribe(sub.routingKey, sub.callback, true);
         });
     }
 
@@ -72,24 +73,23 @@ class PubSub {
     /**
      * 
      * @param {string} routingKey : Routing key for the subscription, ex: "order.created"
-     * @param {string} queue : The queue name to bind to, ex: "order.created.queue"
      * @param {function} callback : The callback function to handle received messages
      */
-    async subscribe(routingKey, queue, callback, restore = false) {
+    async subscribe(routingKey, callback, restore = false) {
         while(!this.channel) {
             console.warn('[PubSub] Channel not ready. Retry subscribe later.');
             await new Promise(resolve => setTimeout(resolve, 5000));
         }
 
         if(!restore){
-            this.subscribers.push({routingKey, queue, callback });
+            this.subscribers.push({routingKey, callback });
         }
 
         try {
-            const q = await this.channel.assertQueue(queue, { durable: true });
+            const q = await this.channel.assertQueue(this.queue, { durable: true });
             await this.channel.bindQueue(q.queue, this.exchange, routingKey);
             
-            console.log(`[PubSub] Subscribed to ${queue} (${routingKey})`);
+            console.log(`[PubSub] Subscribed to ${this.queue} (${routingKey})`);
 
             this.channel.consume(q.queue, (msg) => {
                 if (msg !== null) {
