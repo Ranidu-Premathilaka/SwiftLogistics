@@ -77,6 +77,7 @@ class internalRouter {
 
     /**
      * 
+     * @param {string} method : HTTP method (GET, POST, PUT, PATCH, DELETE)
      * @param {string} route : string of the mapped api route. ex : /order/createOrder
      * @param {object} parameters : object of the parameters for the route(ORDER SHOULD BE MAINTAINED). ex : { itemId: 'string', quantity: 'number' }
      * @param {function} handler : handler function for the route (async and sync functions supported)
