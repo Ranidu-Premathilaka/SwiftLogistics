@@ -1,21 +1,27 @@
 version: '3.8'
 services:
   cms:
-    build: ./source-code/sub-systems/cms
+    build:
+      context: ./source-code
+      dockerfile: ./services/cms-service/Dockerfile
     container_name: cms-service
     ports:
       - "3001:3000"
     restart: unless-stopped
     working_dir: /app
   rms:
-    build: ./source-code/sub-systems/rms
+    build:
+      context: ./source-code
+      dockerfile: ./services/rms-service/Dockerfile
     container_name: rms-service
     ports:
       - "3002:3000"
     restart: unless-stopped
     working_dir: /app
   wms:
-    build: ./source-code/sub-systems/wms
+    build:
+      context: ./source-code
+      dockerfile: ./services/wms-service/Dockerfile
     container_name: wms-service
     ports:
       - "3003:3000"
