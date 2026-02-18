@@ -1,4 +1,4 @@
-import express from 'express';
+const express = require('express');
 
 class routingError extends Error {
     constructor(message, statusCode) {

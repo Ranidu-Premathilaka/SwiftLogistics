@@ -1,5 +1,9 @@
 const pubsub = require('../utility/pubsub');
 const config = require('./config');
+const internalRouter = require('../utility/internalRouter');
+
+const router = new internalRouter();
+router.registerRoute
 
 const RABBITMQ_URL = config.rabbitMQ.url;
 const EXCHANGE_NAME = config.rabbitMQ.exchangeName; 

@@ -28,12 +28,4 @@ services:
       - "5672:5672"
       - "15672:15672"
     restart: unless-stopped
-
-  order-service:
-    build: ./source-code/services/order-service
-    container_name: order-service
-    environment:
-      - RABBITMQ_URL=amqp://rabbitmq
-    depends_on:
-      - rabbitmq
-    restart: unless-stopped
+    
