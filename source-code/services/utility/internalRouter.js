@@ -76,7 +76,7 @@ class internalRouter {
     }
 
     /**
-     * 
+     *  exits and returns the error to the client 
      * @param {string} errorMessage : Ex: "Route not found: GET /order/createOrder" 
      * @param {int} statusCode : Ex: 404
      */
