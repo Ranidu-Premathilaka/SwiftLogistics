@@ -14,7 +14,6 @@ module.exports = {
 
   // Routing keys this adapter subscribes to
   routingKeys: {
-    clientAuthenticate: 'cms.client.authenticate',
     getClientOrders:    'cms.client.orders.get',
     getOrderInfo:       'cms.order.info.get',
     createOrder:        'cms.order.create',

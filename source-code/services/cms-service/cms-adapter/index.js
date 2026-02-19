@@ -9,7 +9,6 @@
  *      the original correlationId so callers can match responses.
  *
  * Routing keys subscribed:
- *   cms.client.authenticate — { clientId, clientSecret }
  *   cms.client.orders.get   — { clientId }
  *   cms.order.info.get      — { orderId }
  *   cms.order.create        — { orderData, transactionInfo }
@@ -72,18 +71,6 @@ class CMSAdapter {
         await this.#initSoap();
 
         const { routingKeys } = config;
-
-        // cms.client.authenticate — { correlationId, clientId, clientSecret }
-        await this.pubsub.subscribe(routingKeys.clientAuthenticate, async ({ correlationId, clientId, clientSecret }) => {
-            console.log(`[CMSAdapter] clientAuthenticate: clientId=${clientId}`);
-            try {
-                const res = await this.#sendSOAP('AuthenticateClient', { clientId, clientSecret });
-                await this.#reply(correlationId, res.AuthenticateClientResponse);
-            } catch (err) {
-                console.error('[CMSAdapter] clientAuthenticate error:', err.message);
-                await this.#replyError(correlationId, err);
-            }
-        });
 
         // cms.client.orders.get — { correlationId, clientId }
         await this.pubsub.subscribe(routingKeys.getClientOrders, async ({ correlationId, clientId }) => {

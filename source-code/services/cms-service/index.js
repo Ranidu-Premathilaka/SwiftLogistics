@@ -15,16 +15,6 @@ const { port } = require("./config");
 const cmsService = {
   CMSService: {
     CMSPort: {
-      AuthenticateClient({ clientId, clientSecret }) {
-        console.log("AuthenticateClient called:", clientId, clientSecret);
-        return {
-          AuthenticateClientResponse: {
-            success: true,
-            token: "mock-token-123",
-          },
-        };
-      },
-
       GetClientOrders({ clientId }) {
         console.log("GetClientOrders called:", clientId);
         return {
@@ -82,15 +72,6 @@ const wsdlXml = `
   xmlns:xsd="http://www.w3.org/2001/XMLSchema"
   xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/">
 
-  <message name="AuthenticateClientRequest">
-    <part name="clientId" type="xsd:string"/>
-    <part name="clientSecret" type="xsd:string"/>
-  </message>
-  <message name="AuthenticateClientResponse">
-    <part name="success" type="xsd:boolean"/>
-    <part name="token" type="xsd:string"/>
-  </message>
-
   <message name="GetClientOrdersRequest">
     <part name="clientId" type="xsd:string"/>
   </message>
@@ -129,10 +110,6 @@ const wsdlXml = `
   </message>
 
   <portType name="CMSPortType">
-    <operation name="AuthenticateClient">
-      <input message="tns:AuthenticateClientRequest"/>
-      <output message="tns:AuthenticateClientResponse"/>
-    </operation>
     <operation name="GetClientOrders">
       <input message="tns:GetClientOrdersRequest"/>
       <output message="tns:GetClientOrdersResponse"/>
@@ -157,12 +134,6 @@ const wsdlXml = `
 
   <binding name="CMSBinding" type="tns:CMSPortType">
     <soap:binding style="rpc" transport="http://schemas.xmlsoap.org/soap/http"/>
-
-    <operation name="AuthenticateClient">
-      <soap:operation soapAction="AuthenticateClient"/>
-      <input><soap:body use="literal"/></input>
-      <output><soap:body use="literal"/></output>
-    </operation>
 
     <operation name="GetClientOrders">
       <soap:operation soapAction="GetClientOrders"/>
