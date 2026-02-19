@@ -2,3 +2,4 @@
 documentation/compiled/*
 node_modules/
 source-code/services/.DS_Store
+start.sh
