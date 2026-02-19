@@ -1,117 +1,152 @@
 /**
- * CMS Adapter
- * @description Adapter for CMS (Client Management System) integration
+ * CMS Adapter - Client Management System (PubSub Microservice)
  *
- * @interface CMSAdapter
+ * This adapter is a self-contained microservice.  It:
+ *   1. Receives commands from the rest of the platform via RabbitMQ (PubSub utility).
+ *   2. Translates each command into a SOAP call to the locally hosted legacy CMS service
+ *      (which is NOT exposed outside the container).
+ *   3. Publishes the result back onto the exchange using a reply routing key that carries
+ *      the original correlationId so callers can match responses.
  *
- * @method startConnection - Start connection to CMS
+ * Routing keys subscribed:
+ *   cms.client.authenticate — { clientId, clientSecret }
+ *   cms.client.orders.get   — { clientId }
+ *   cms.order.info.get      — { orderId }
+ *   cms.order.create        — { orderData, transactionInfo }
+ *   cms.order.update        — { orderId, updateData }
+ *   cms.order.delete        — { orderId }
  *
- * @method clientAuthenticate - Authenticate client with CMS
- * @param {string} clientId - Client ID for authentication
- * @param {string} clientSecret - Client secret for authentication
- * @returns {Object} Authentication result object
- *
- * @method getClientOrderID - Get client order information from CMS
- * @param {string} clientId - Client ID to fetch order information
- * @returns {Array} List of client orders
- *
- * @method getOrderInfo - Get order information from CMS
- * @param {string} orderId - Order ID to fetch information
- * @returns {Object} Order information object
- *
- * @method createOrder - Create order in CMS
- * @param {Object} orderData - Order data to create in CMS
- * @param {Object} transactionInfo - Transaction information related to the order
- * @returns {boolean} Result of create operation
- *
- * @method updateOrder - Update order in CMS
- * @param {string} orderId - Order ID to update in CMS
- * @param {Object} updateData - Data to update the order with
- * @returns {Object} Updated order information object
- *
- * @method deleteOrder - Delete order in CMS
- * @param {string} orderId - Order ID to delete in CMS
- * @returns {boolean} Result of delete operation
- *
+ * Reply routing key (publisher):
+ *   cms.reply  — { correlationId, success, data?, error? }
  */
 
-const soap = require("soap");
+const soap    = require('soap');
+const PubSub  = require('../../utility/pubsub');
+const config  = require('../config');
 
 class CMSAdapter {
-  #baseUrl;
-  #CMSClient;
+    constructor({ legacyUrl } = {}) {
+        this.baseUrl    = legacyUrl || `http://${config.host}:${config.port}`;
+        this.soapClient = null;
 
-  constructor({ url, port }) {
-    this.#baseUrl = `${url}:${port}`;
-    this.#CMSClient = null;
-  }
-
-  /** Initialize SOAP client (must be called before using adapter) */
-  async init() {
-    // Create SOAP client using WSDL
-    this.#CMSClient = await soap.createClientAsync(this.#baseUrl + "/wsdl?wsdl");
-    // Override the endpoint to use the correct URL (in case WSDL has a different one)
-    this.#CMSClient.setEndpoint(this.#baseUrl + "/wsdl");
-  }
-
-  /** Send SOAP request using node-soap client */
-  async #sendSOAPRequest(action, args) {
-    if (!this.#CMSClient) {
-      throw new Error("CMSClient not initialized. Call init() first.");
+        const { url, exchange, queue } = config.rabbitmq;
+        this.pubsub = new PubSub(url, exchange, queue);
     }
 
-    try {
-      // node-soap generates async methods automatically
-      const methodName = action + "Async"; // e.g., "AuthenticateClient" -> "AuthenticateClientAsync"
-      if (typeof this.#CMSClient[methodName] !== "function") {
-        throw new Error(`SOAP method ${methodName} not found in WSDL`);
-      }
+    // ── Internal: initialise the SOAP client against the local legacy service ─
 
-      const [result] = await this.#CMSClient[methodName](args); // returns array with result
-      return result;
-    } catch (err) {
-      console.error("SOAP Error details:", err);
-      throw new Error(`SOAP request failed: ${err.message || JSON.stringify(err)}`);
+    async #initSoap() {
+        this.soapClient = await soap.createClientAsync(`${this.baseUrl}/wsdl?wsdl`);
+        this.soapClient.setEndpoint(`${this.baseUrl}/wsdl`);
+        console.log('[CMSAdapter] SOAP client initialised.');
     }
-  }
 
-  /** Public methods */
+    async #sendSOAP(action, args) {
+        if (!this.soapClient) throw new Error('SOAP client not initialised');
+        const methodName = action + 'Async';
+        if (typeof this.soapClient[methodName] !== 'function') {
+            throw new Error(`SOAP method ${methodName} not found in WSDL`);
+        }
+        const [result] = await this.soapClient[methodName](args);
+        return result;
+    }
 
-  async clientAuthenticate(clientId, clientSecret) {
-    const args = { clientId, clientSecret };
-    const response = await this.#sendSOAPRequest("AuthenticateClient", args);
-    return response.AuthenticateClientResponse;
-  }
+    // ── Reply helpers ─────────────────────────────────────────────────────────
 
-  async getClientOrderID(clientId) {
-    const args = { clientId };
-    const response = await this.#sendSOAPRequest("GetClientOrders", args);
-    return response.GetClientOrdersResponse.orders;
-  }
+    async #reply(correlationId, data) {
+        await this.pubsub.publish(config.replyRoutingKey, { correlationId, success: true, data });
+    }
 
-  async getOrderInfo(orderId) {
-    const args = { orderId };
-    const response = await this.#sendSOAPRequest("GetOrderInfo", args);
-    return response.GetOrderInfoResponse.order;
-  }
+    async #replyError(correlationId, error) {
+        await this.pubsub.publish(config.replyRoutingKey, {
+            correlationId,
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+        });
+    }
 
-  async createOrder(orderData, transactionInfo) {
-    const args = { orderData, transactionInfo };
-    const response = await this.#sendSOAPRequest("CreateOrder", args);
-    return response.CreateOrderResponse.success;
-  }
+    // ── Start the adapter ─────────────────────────────────────────────────────
 
-  async updateOrder(orderId, updateData) {
-    const args = { orderId, updateData };
-    const response = await this.#sendSOAPRequest("UpdateOrder", args);
-    return response.UpdateOrderResponse.updatedOrder;
-  }
+    async start() {
+        await this.pubsub.connect();
+        await this.#initSoap();
 
-  async deleteOrder(orderId) {
-    const args = { orderId };
-    const response = await this.#sendSOAPRequest("DeleteOrder", args);
-    return response.DeleteOrderResponse.success;
-  }
+        const { routingKeys } = config;
+
+        // cms.client.authenticate — { correlationId, clientId, clientSecret }
+        await this.pubsub.subscribe(routingKeys.clientAuthenticate, async ({ correlationId, clientId, clientSecret }) => {
+            console.log(`[CMSAdapter] clientAuthenticate: clientId=${clientId}`);
+            try {
+                const res = await this.#sendSOAP('AuthenticateClient', { clientId, clientSecret });
+                await this.#reply(correlationId, res.AuthenticateClientResponse);
+            } catch (err) {
+                console.error('[CMSAdapter] clientAuthenticate error:', err.message);
+                await this.#replyError(correlationId, err);
+            }
+        });
+
+        // cms.client.orders.get — { correlationId, clientId }
+        await this.pubsub.subscribe(routingKeys.getClientOrders, async ({ correlationId, clientId }) => {
+            console.log(`[CMSAdapter] getClientOrders: clientId=${clientId}`);
+            try {
+                const res = await this.#sendSOAP('GetClientOrders', { clientId });
+                await this.#reply(correlationId, res.GetClientOrdersResponse.orders);
+            } catch (err) {
+                console.error('[CMSAdapter] getClientOrders error:', err.message);
+                await this.#replyError(correlationId, err);
+            }
+        });
+
+        // cms.order.info.get — { correlationId, orderId }
+        await this.pubsub.subscribe(routingKeys.getOrderInfo, async ({ correlationId, orderId }) => {
+            console.log(`[CMSAdapter] getOrderInfo: orderId=${orderId}`);
+            try {
+                const res = await this.#sendSOAP('GetOrderInfo', { orderId });
+                await this.#reply(correlationId, res.GetOrderInfoResponse.order);
+            } catch (err) {
+                console.error('[CMSAdapter] getOrderInfo error:', err.message);
+                await this.#replyError(correlationId, err);
+            }
+        });
+
+        // cms.order.create — { correlationId, orderData, transactionInfo }
+        await this.pubsub.subscribe(routingKeys.createOrder, async ({ correlationId, orderData, transactionInfo }) => {
+            console.log('[CMSAdapter] createOrder');
+            try {
+                const res = await this.#sendSOAP('CreateOrder', { orderData, transactionInfo });
+                await this.#reply(correlationId, { success: res.CreateOrderResponse.success });
+            } catch (err) {
+                console.error('[CMSAdapter] createOrder error:', err.message);
+                await this.#replyError(correlationId, err);
+            }
+        });
+
+        // cms.order.update — { correlationId, orderId, updateData }
+        await this.pubsub.subscribe(routingKeys.updateOrder, async ({ correlationId, orderId, updateData }) => {
+            console.log(`[CMSAdapter] updateOrder: orderId=${orderId}`);
+            try {
+                const res = await this.#sendSOAP('UpdateOrder', { orderId, updateData });
+                await this.#reply(correlationId, res.UpdateOrderResponse.updatedOrder);
+            } catch (err) {
+                console.error('[CMSAdapter] updateOrder error:', err.message);
+                await this.#replyError(correlationId, err);
+            }
+        });
+
+        // cms.order.delete — { correlationId, orderId }
+        await this.pubsub.subscribe(routingKeys.deleteOrder, async ({ correlationId, orderId }) => {
+            console.log(`[CMSAdapter] deleteOrder: orderId=${orderId}`);
+            try {
+                const res = await this.#sendSOAP('DeleteOrder', { orderId });
+                await this.#reply(correlationId, { success: res.DeleteOrderResponse.success });
+            } catch (err) {
+                console.error('[CMSAdapter] deleteOrder error:', err.message);
+                await this.#replyError(correlationId, err);
+            }
+        });
+
+        console.log('[CMSAdapter] Listening for commands on RabbitMQ.');
+    }
 }
 
 module.exports = CMSAdapter;

@@ -2,5 +2,8 @@
   "name": "wms",
   "version": "1.0.0",
   "main": "index.js",
-  "dependencies": {}
+  "dependencies": {
+    "amqplib": "^0.10.4",
+    "axios": "^1.7.2"
+  }
 }

@@ -1,32 +1,5 @@
 version: '3.8'
 services:
-  cms:
-    build:
-      context: ./source-code
-      dockerfile: ./services/cms-service/Dockerfile
-    container_name: cms-service
-    ports:
-      - "3001:3000"
-    restart: unless-stopped
-    working_dir: /app
-  rms:
-    build:
-      context: ./source-code
-      dockerfile: ./services/rms-service/Dockerfile
-    container_name: rms-service
-    ports:
-      - "3002:3000"
-    restart: unless-stopped
-    working_dir: /app
-  wms:
-    build:
-      context: ./source-code
-      dockerfile: ./services/wms-service/Dockerfile
-    container_name: wms-service
-    ports:
-      - "3003:3000"
-    restart: unless-stopped
-    working_dir: /app
   rabbitmq:
     image: rabbitmq:4-management
     container_name: rabbitmq-service
@@ -34,4 +7,45 @@ services:
       - "5672:5672"
       - "15672:15672"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  cms:
+    build:
+      context: ./source-code
+      dockerfile: ./services/cms-service/Dockerfile
+    container_name: cms-service
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq-service:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+  rms:
+    build:
+      context: ./source-code
+      dockerfile: ./services/rms-service/Dockerfile
+    container_name: rms-service
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq-service:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+  wms:
+    build:
+      context: ./source-code
+      dockerfile: ./services/wms-service/Dockerfile
+    container_name: wms-service
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq-service:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
     

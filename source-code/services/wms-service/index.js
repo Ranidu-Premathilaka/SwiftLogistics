@@ -135,6 +135,13 @@ const server = http.createServer(async (req, res) => {
   json(res, 404, { error: "Not found" });
 });
 
-server.listen(port, () => {
-  console.log(`Mock WMS service listening on http://localhost:${port}`);
+// Bind only to loopback — this service must NOT be reachable outside the container.
+// All external interaction goes through the WMS Adapter via RabbitMQ.
+server.listen(port, '127.0.0.1', async () => {
+  console.log(`[WMS] Legacy service listening on http://127.0.0.1:${port} (internal only)`);
+
+  // Start the PubSub adapter once the legacy service is ready.
+  const WMSAdapter = require('./wms-adapter');
+  const adapter = new WMSAdapter();
+  await adapter.start();
 });

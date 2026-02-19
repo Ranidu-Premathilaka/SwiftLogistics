@@ -1,61 +1,147 @@
 /**
- * WMS Adapter - Warehouse Management System
- * @description Adapter for integrating with Warehouse Management System (WMS)
+ * WMS Adapter - Warehouse Management System (PubSub Microservice)
  *
- * @interface WMSAdapter
+ * This adapter is a self-contained microservice.  It:
+ *   1. Receives commands from the rest of the platform via RabbitMQ (PubSub utility).
+ *   2. Translates each command into an HTTP call to the locally hosted legacy WMS service
+ *      (which is NOT exposed outside the container).
+ *   3. Publishes the result back onto the exchange using a reply routing key that carries
+ *      the original correlationId so callers can match responses.
  *
- * @method itemInStock - Check if an item is in stock in WMS
- * @param {string} itemId - Item ID to check in stock
- * @returns {Promise<boolean>} Promise that resolves to true if item is in stock, false otherwise
- * 
- * @method itemOrder - Reserve an item in WMS for an order
- * @param {string} itemId - Item ID to reserve
- * @param {number} quantity - Quantity to reserve
- * @returns {string} Tracking ID for the reservation
- * 
- * @method itemStatus - Get the status of an item in WMS
- * @param {string} trackingId - Tracking ID for the reservation
- * @returns {Promise<string>} Promise that resolves to the status of the item (e.g., "reserved", "picked", "shipped")
- * 
- * @method updateItemStatus - Update the status of an item in WMS
- * @param {string} trackingId - Tracking ID for the reservation
- * @param {string} status - New status to update (e.g., "picked", "shipped")
- * @returns {Promise<void>} Promise that resolves when the status is updated
- * 
- * @method itemReceived - Mark an item as received in WMS
- * @param {string} trackingId - Tracking ID for the reservation
- * @param {string} signatureUrl - URL to the signature image for proof of delivery  
- * @returns {Promise<void>} Promise that resolves when the item is marked as received
- * 
+ * Routing keys subscribed:
+ *   wms.item.stock.check   — { itemId }
+ *   wms.item.order         — { itemId, quantity }
+ *   wms.item.status.get    — { trackingId }
+ *   wms.item.status.update — { trackingId, status }
+ *   wms.item.received      — { trackingId, signatureUrl }
+ *
+ * Reply routing key (publisher):
+ *   wms.reply  — { correlationId, success, data?, error? }
  */
 
-const axios = require("axios");
+const axios   = require('axios');
+const PubSub  = require('../../utility/pubsub');
+const config  = require('../config');
+
 class WMSAdapter {
-    constructor({ url, port }) {
-        this.baseUrl = `http://${url}:${port}`;
+    /**
+     * @param {object} opts
+     * @param {string} opts.legacyUrl  - Base URL of the internal WMS service (default: http://localhost:<port>)
+     */
+    constructor({ legacyUrl } = {}) {
+        this.baseUrl = legacyUrl || `http://localhost:${config.port}`;
+
+        const { url, exchange, queue } = config.rabbitmq;
+        this.pubsub = new PubSub(url, exchange, queue);
     }
 
-    async itemInStock(itemId) {
-        const response = await axios.get(`${this.baseUrl}/stock/${itemId}`);
-        return response.data.inStock;
+    // ── Internal helpers to call the legacy WMS HTTP service ─────────────────
+
+    async #itemInStock(itemId) {
+        const res = await axios.get(`${this.baseUrl}/stock/${itemId}`);
+        return res.data.inStock;
     }
 
-    async itemOrder(itemId, quantity) {
-        const response = await axios.post(`${this.baseUrl}/order`, { itemId, quantity });
-        return response.data.trackingId;
+    async #itemOrder(itemId, quantity) {
+        const res = await axios.post(`${this.baseUrl}/order`, { itemId, quantity });
+        return res.data.trackingId;
     }
 
-    async itemStatus(trackingId) {
-        const response = await axios.get(`${this.baseUrl}/status/${trackingId}`);
-        return response.data.status;
+    async #itemStatus(trackingId) {
+        const res = await axios.get(`${this.baseUrl}/status/${trackingId}`);
+        return res.data.status;
     }
 
-    async updateItemStatus(trackingId, status) {
+    async #updateItemStatus(trackingId, status) {
         await axios.put(`${this.baseUrl}/status/${trackingId}`, { status });
     }
 
-    async itemReceived(trackingId, signatureUrl) {
+    async #itemReceived(trackingId, signatureUrl) {
         await axios.post(`${this.baseUrl}/received`, { trackingId, signatureUrl });
+    }
+
+    // ── Reply helper ──────────────────────────────────────────────────────────
+
+    async #reply(correlationId, data) {
+        await this.pubsub.publish(config.replyRoutingKey, { correlationId, success: true, data });
+    }
+
+    async #replyError(correlationId, error) {
+        await this.pubsub.publish(config.replyRoutingKey, {
+            correlationId,
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+        });
+    }
+
+    // ── Start the adapter (connect to RabbitMQ and register all handlers) ────
+
+    async start() {
+        await this.pubsub.connect();
+
+        const { routingKeys } = config;
+
+        // wms.item.stock.check — { correlationId, itemId }
+        await this.pubsub.subscribe(routingKeys.itemInStock, async ({ correlationId, itemId }) => {
+            console.log(`[WMSAdapter] itemInStock: itemId=${itemId}`);
+            try {
+                const inStock = await this.#itemInStock(itemId);
+                await this.#reply(correlationId, { inStock });
+            } catch (err) {
+                console.error('[WMSAdapter] itemInStock error:', err.message);
+                await this.#replyError(correlationId, err);
+            }
+        });
+
+        // wms.item.order — { correlationId, itemId, quantity }
+        await this.pubsub.subscribe(routingKeys.itemOrder, async ({ correlationId, itemId, quantity }) => {
+            console.log(`[WMSAdapter] itemOrder: itemId=${itemId}, qty=${quantity}`);
+            try {
+                const trackingId = await this.#itemOrder(itemId, quantity);
+                await this.#reply(correlationId, { trackingId });
+            } catch (err) {
+                console.error('[WMSAdapter] itemOrder error:', err.message);
+                await this.#replyError(correlationId, err);
+            }
+        });
+
+        // wms.item.status.get — { correlationId, trackingId }
+        await this.pubsub.subscribe(routingKeys.itemStatus, async ({ correlationId, trackingId }) => {
+            console.log(`[WMSAdapter] itemStatus: trackingId=${trackingId}`);
+            try {
+                const status = await this.#itemStatus(trackingId);
+                await this.#reply(correlationId, { status });
+            } catch (err) {
+                console.error('[WMSAdapter] itemStatus error:', err.message);
+                await this.#replyError(correlationId, err);
+            }
+        });
+
+        // wms.item.status.update — { correlationId, trackingId, status }
+        await this.pubsub.subscribe(routingKeys.updateItemStatus, async ({ correlationId, trackingId, status }) => {
+            console.log(`[WMSAdapter] updateItemStatus: trackingId=${trackingId}, status=${status}`);
+            try {
+                await this.#updateItemStatus(trackingId, status);
+                await this.#reply(correlationId, { updated: true });
+            } catch (err) {
+                console.error('[WMSAdapter] updateItemStatus error:', err.message);
+                await this.#replyError(correlationId, err);
+            }
+        });
+
+        // wms.item.received — { correlationId, trackingId, signatureUrl }
+        await this.pubsub.subscribe(routingKeys.itemReceived, async ({ correlationId, trackingId, signatureUrl }) => {
+            console.log(`[WMSAdapter] itemReceived: trackingId=${trackingId}`);
+            try {
+                await this.#itemReceived(trackingId, signatureUrl);
+                await this.#reply(correlationId, { received: true });
+            } catch (err) {
+                console.error('[WMSAdapter] itemReceived error:', err.message);
+                await this.#replyError(correlationId, err);
+            }
+        });
+
+        console.log('[WMSAdapter] Listening for commands on RabbitMQ.');
     }
 }
 

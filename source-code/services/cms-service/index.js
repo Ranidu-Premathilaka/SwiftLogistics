@@ -209,8 +209,15 @@ const server = http.createServer((req, res) => {
   res.end("Not found");
 });
 
-server.listen(port, async () => {
-  console.log(`Mock CMS SOAP server listening on http://localhost:${port}/wsdl`);
-  soap.listen(server, "/wsdl", cmsService, wsdlXml);
+// Bind only to loopback — this service must NOT be reachable outside the container.
+// All external interaction goes through the CMS Adapter via RabbitMQ.
+server.listen(port, '127.0.0.1', async () => {
+  console.log(`[CMS] Legacy SOAP service listening on http://127.0.0.1:${port}/wsdl (internal only)`);
+  soap.listen(server, '/wsdl', cmsService, wsdlXml);
+
+  // Start the PubSub adapter once the legacy service is ready.
+  const CMSAdapter = require('./cms-adapter');
+  const adapter = new CMSAdapter();
+  await adapter.start();
 });
 
