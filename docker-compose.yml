@@ -123,6 +123,28 @@ services:
       - postgres
     restart: unless-stopped
 
+  notify:
+    build:
+      context: ./source-code
+      dockerfile: ./services/notify-service/Dockerfile
+    container_name: notify-service
+    networks:
+      - internal
+    environment:
+      - PORT=3000
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq-service:5672
+      - DB_HOST=postgres-service
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-logistic_db}
+      - DB_PORT=5432
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_started
+    restart: unless-stopped
+
 networks:
   internal:
     driver: bridge

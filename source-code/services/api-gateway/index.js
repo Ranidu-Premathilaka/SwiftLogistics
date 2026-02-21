@@ -1,8 +1,21 @@
-const http   = require('http');
-const jwt    = require('jsonwebtoken');
-const config = require('./config');
+const http      = require('http');
+const httpProxy = require('http-proxy');
+const jwt       = require('jsonwebtoken');
+const config    = require('./config');
 
 const { port: PORT, jwtSecret: JWT_SECRET, serviceMap: SERVICE_MAP, publicPrefixes: PUBLIC_PREFIXES } = config;
+
+const proxy = httpProxy.createProxyServer({});
+
+proxy.on('error', (err, req, resOrSocket) => {
+    console.error(`[API Gateway] Proxy error: ${err.message}`);
+    if (resOrSocket.writeHead) {
+        resOrSocket.writeHead(502, { 'Content-Type': 'application/json' });
+        resOrSocket.end(JSON.stringify({ error: 'Bad Gateway', message: err.message }));
+    } else {
+        resOrSocket.destroy();
+    }
+});
 
 function isPublic(url) {
     return PUBLIC_PREFIXES.some(prefix => url === prefix || url.startsWith(prefix));
@@ -15,80 +28,78 @@ function validateToken(req) {
 
     const token = authHeader.slice(7);
     try {
-        return jwt.verify(token, JWT_SECRET); // returns decoded payload
+        return jwt.verify(token, JWT_SECRET);
     } catch (err) {
         throw Object.assign(new Error('Invalid or expired token'), { status: 401 });
     }
 }
 
-function proxyRequest(targetUrl, req, res) {
-    const url = new URL(targetUrl);
+function resolveTarget(url) {
+    const parts       = url.split('/').filter(Boolean);
+    const serviceName = parts[0];
+    const serviceBase = SERVICE_MAP[serviceName];
+    if (!serviceBase) return null;
 
-    const options = {
-        hostname: url.hostname,
-        port: url.port || 80,
-        path: url.pathname + (url.search || ''),
-        method: req.method,
-        headers: {
-            ...req.headers,
-            host: url.hostname,
-        },
-    };
-
-    const proxy = http.request(options, (proxyRes) => {
-        res.writeHead(proxyRes.statusCode, proxyRes.headers);
-        proxyRes.pipe(res, { end: true });
-    });
-
-    proxy.on('error', (err) => {
-        console.error(`[API Gateway] Proxy error: ${err.message}`);
-        res.writeHead(502, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Bad Gateway', message: err.message }));
-    });
-
-    req.pipe(proxy, { end: true });
+    // Strip the service prefix from the path before forwarding
+    const remaining = '/' + parts.slice(1).join('/');
+    return { target: serviceBase, path: remaining };
 }
 
 const server = http.createServer((req, res) => {
     const { method, url } = req;
-
     console.log(`[API Gateway] ${method} ${url}`);
 
-    // Health check
     if (method === 'GET' && url === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ status: 'ok' }));
     }
 
-    // JWT validation for protected routes
     if (!isPublic(url)) {
         try {
             const payload = validateToken(req);
             req.headers['x-username'] = payload.username;
-            req.headers['x-role'] = payload.role;
+            req.headers['x-role']     = payload.role;
         } catch (err) {
             res.writeHead(err.status || 401, { 'Content-Type': 'application/json' });
             return res.end(JSON.stringify({ error: err.message }));
         }
     }
 
-    // Resolve service from first path segment
-    // e.g. /order/create  →  service: 'order', downstream path: /create
-    const parts = url.split('/').filter(Boolean); // ['order', 'create']
-    const serviceName = parts[0];                 // 'order'
-    const remainingPath = '/' + parts.slice(1).join('/'); // '/create'
-
-    const serviceBase = SERVICE_MAP[serviceName];
-
-    if (!serviceBase) {
+    const resolved = resolveTarget(url);
+    if (!resolved) {
         res.writeHead(404, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ error: `Unknown service: ${serviceName}` }));
+        return res.end(JSON.stringify({ error: `Unknown service: ${url.split('/')[1]}` }));
     }
 
-    const targetUrl = serviceBase + remainingPath;
-    console.log(`[API Gateway] Routing to ${targetUrl}`);
+    console.log(`[API Gateway] Routing to ${resolved.target}${resolved.path}`);
+    req.url = resolved.path;
+    proxy.web(req, res, { target: resolved.target });
+});
 
-    proxyRequest(targetUrl, req, res);
+server.on('upgrade', (req, socket, head) => {
+    console.log(`[API Gateway] WS UPGRADE ${req.url}`);
+
+    if (!isPublic(req.url)) {
+        try {
+            const payload = validateToken(req);
+            req.headers['x-username'] = payload.username;
+            req.headers['x-role']     = payload.role;
+        } catch (err) {
+            socket.write(`HTTP/1.1 ${err.status || 401} Unauthorized\r\nConnection: close\r\n\r\n`);
+            socket.destroy();
+            return;
+        }
+    }
+
+    const resolved = resolveTarget(req.url);
+    if (!resolved) {
+        socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
+        socket.destroy();
+        return;
+    }
+
+    req.url = resolved.path;
+    proxy.ws(req, socket, head, { target: resolved.target });
 });
 
 server.listen(PORT, () => {
