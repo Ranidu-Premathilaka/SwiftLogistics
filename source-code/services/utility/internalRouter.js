@@ -48,7 +48,7 @@ class internalRouter {
 
     #callHandler(handler, definedParams, receivedParams) {
 
-        args = [];        
+        let args = [];        
 
         for(const param of Object.keys(definedParams)) {
             if(!receivedParams[param]) {
@@ -122,6 +122,7 @@ class internalRouter {
                 if(e instanceof routingError && e.statusCode) {
                     res.status(e.statusCode).send(e.message);
                 } else {
+                    console.error('[InternalRouter] Unhandled error:', e);
                     res.status(500).send("Internal Server Error");
                 }
             }

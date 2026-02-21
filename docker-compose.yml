@@ -77,22 +77,51 @@ services:
 
 
   # # API Gateway that clients interact with
-  # api-gateway:
-  #   build:
-  #     context: ./source-code
-  #     dockerfile: ./services/api-gateway/Dockerfile
-  #   container_name: api-gateway-service
-  #   ports:
-  #     - "8080:8080"
-  #   networks:
-  #     - internal
-  #     - public
-  #   environment:
-  #     - RABBITMQ_URL=amqp://guest:guest@rabbitmq-service:5672
-  #   depends_on:
-  #     rabbitmq:
-  #       condition: service_healthy
-  #   restart: unless-stopped 
+  api-gateway:
+    build:
+      context: ./source-code
+      dockerfile: ./services/api-gateway/Dockerfile
+    container_name: api-gateway-service
+    ports:
+      - "8081:8080"
+    networks:
+      - internal
+    environment:
+      - PORT=8080
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres-service
+    networks:
+      - internal
+    environment:
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
+      - POSTGRES_DB=${DB_NAME:-logistic_db}
+    volumes:
+      - ./source-code/db:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+
+  auth:
+    build:
+      context: ./source-code
+      dockerfile: ./services/auth-service/Dockerfile
+    container_name: auth-service
+    networks:
+      - internal
+    environment:
+      - PORT=3000
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
+      - DB_HOST=postgres-service
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-logistic_db}
+      - DB_PORT=5432
+    depends_on:
+      - postgres
+    restart: unless-stopped
 
 networks:
   internal:
