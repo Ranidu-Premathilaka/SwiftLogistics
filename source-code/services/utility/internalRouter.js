@@ -17,6 +17,7 @@ class internalRouter {
         this.routes = {};
         this.app = null;
         this.allowedMethods = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+        this.notNeedIdempotencyKey = ["GET"];
         this.processedRequestIds = new Set(); // Move this to a more persistent storage like redis
         this.#initRoutes();
     }  
@@ -31,7 +32,12 @@ class internalRouter {
         return this.processedRequestIds.has(requestId);
     }
 
-    #postIdempotentHandler(requestId) {
+    #idempotentHandler(method, requestId) {
+
+        if(this.notNeedIdempotencyKey.includes(method)) {
+            return;
+        }
+
         if (!requestId) {
             throw new routingError("Missing x-request-id header", 400);
         }
@@ -46,30 +52,12 @@ class internalRouter {
         this.processedRequestIds.add(requestId);
     }
 
-    #callHandler(handler, definedParams, receivedParams) {
-
-        let args = [];        
-
-        for(const param of Object.keys(definedParams)) {
-            if(!receivedParams[param]) {
-                throw new routingError(`Missing parameter: ${param}`, 400);
-            }
-
-            if(typeof receivedParams[param] !== definedParams[param]) {
-                throw new routingError(`Invalid parameter type for ${param}: expected ${definedParams[param]}, got ${typeof receivedParams[param]}`, 400);
-            }
-
-            args.push(receivedParams[param]);
-        }
-
-        return handler(...args);
-    }
-
-    #route(method, path, data) {
+    #route(method, path, data, headers) {
 
         if(this.routes[method] && this.routes[method][path]) {
             const routeInfo = this.routes[method][path];
-            return this.#callHandler(routeInfo.handler, routeInfo.parameters, data);
+            return routeInfo.handler({ ...data, headers });
+            
         }else{
             throw new routingError(`Route not found: ${method} ${path}`, 404);
         }
@@ -80,7 +68,7 @@ class internalRouter {
      * @param {string} errorMessage : Ex: "Route not found: GET /order/createOrder" 
      * @param {int} statusCode : Ex: 404
      */
-    sendRoutingError(errorMessage, statusCode) {
+    static sendRoutingError(errorMessage, statusCode) {
         throw new routingError(errorMessage, statusCode);
     }
 
@@ -88,16 +76,15 @@ class internalRouter {
      * 
      * @param {string} method : HTTP method (GET, POST, PUT, PATCH, DELETE)
      * @param {string} route : string of the mapped api route. ex : /order/createOrder
-     * @param {object} parameters : object of the parameters for the route(ORDER SHOULD BE MAINTAINED). ex : { itemId: 'string', quantity: 'number' }
-     * @param {function} handler : handler function for the route (async and sync functions supported)
+     * @param {function} handler : handler function for the route (async and sync functions supported).
+     *                             Receives a single object with all body/query params plus a `headers` key.
      */
-    registerRoute(method, route, parameters, handler) {
+    registerRoute(method, route, handler) {
         if(!this.allowedMethods.includes(method)) {
             throw new routingError(`Method ${method} is not allowed. Allowed methods are: ${this.allowedMethods.join(", ")}`, 405);
         }
 
         this.routes[method][route] = {
-            parameters: parameters,
             handler: handler
         };
     }
@@ -112,11 +99,9 @@ class internalRouter {
                     throw new routingError('Method not allowed', 405);
                 }
 
-                if(req.method === "POST"){
-                    this.#postIdempotentHandler(req.headers['x-request-id']);
-                }
+                this.#idempotentHandler(req.method, req.headers['x-request-id']);
 
-                const result = await this.#route(req.method, req.path, req.method === "GET" ? req.query : req.body);
+                const result = await this.#route(req.method, req.path, req.method === "GET" ? req.query : req.body, req.headers);
                 res.status(200).send(result);
             } catch (e) {
                 if(e instanceof routingError && e.statusCode) {
