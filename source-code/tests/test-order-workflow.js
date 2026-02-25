@@ -175,13 +175,14 @@ async function delay(ms){
             assert(typeof item.itemId === 'string', 'item.itemId should be a string');
             assert(typeof item.name   === 'string', 'item.name should be a string');
             assert(typeof item.stock  === 'number', 'item.stock should be a number');
+            assert(typeof item.price  === 'number', 'item.price should be a number');
         });
 
         // Pick up to 2 in-stock items for the order
         selectedItems = msg.payload.items
             .filter(i => i.stock >= 2)
             .slice(0, 2)
-            .map(i => ({ itemId: i.itemId, quantity: 2 }));
+            .map(i => ({ itemId: i.itemId, quantity: 2, price: i.price }));
 
         assert(selectedItems.length > 0, 'Need at least one item with stock ≥ 2 to proceed');
         console.log(`       selected: ${JSON.stringify(selectedItems)}`);
@@ -199,7 +200,7 @@ async function delay(ms){
             {
                 orderData: {
                     orderId,
-                    amount:   selectedItems.length * 49.99,
+                    amount:   selectedItems.reduce((sum, i) => sum + i.price * i.quantity, 0),
                     currency: 'USD',
                     itemList: selectedItems,
                 },

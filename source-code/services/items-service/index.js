@@ -6,7 +6,7 @@
  * via an async RabbitMQ RPC pattern — the legacy WMS is never reachable directly.
  *
  * Route (exposed via API Gateway as GET /items):
- *   GET /  → { items: [{ itemId, name, stock }] }
+ *   GET /  → { items: [{ itemId, name, stock, price }] }
  */
 
 const InternalRouter = require('../utility/internalRouter');
