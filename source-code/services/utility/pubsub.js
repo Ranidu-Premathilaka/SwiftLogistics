@@ -86,10 +86,11 @@ class PubSub {
         }
 
         try {
-            const q = await this.channel.assertQueue(this.queue, { durable: true });
+            const queueName = `${this.queue}.${routingKey}`;
+            const q = await this.channel.assertQueue(queueName, { durable: true });
             await this.channel.bindQueue(q.queue, this.exchange, routingKey);
             
-            console.log(`[PubSub] Subscribed to ${this.queue} (${routingKey})`);
+            console.log(`[PubSub] Subscribed to ${queueName} (${routingKey})`);
 
             this.channel.consume(q.queue, (msg) => {
                 if (msg !== null) {

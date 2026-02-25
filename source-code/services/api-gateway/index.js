@@ -57,8 +57,8 @@ const server = http.createServer((req, res) => {
     if (!isPublic(url)) {
         try {
             const payload = validateToken(req);
-            req.headers['x-username'] = payload.username;
-            req.headers['x-role']     = payload.role;
+            if (payload.username) req.headers['x-username'] = payload.username;
+            if (payload.role)     req.headers['x-role']     = payload.role;
         } catch (err) {
             res.writeHead(err.status || 401, { 'Content-Type': 'application/json' });
             return res.end(JSON.stringify({ error: err.message }));
@@ -82,8 +82,8 @@ server.on('upgrade', (req, socket, head) => {
     if (!isPublic(req.url)) {
         try {
             const payload = validateToken(req);
-            req.headers['x-username'] = payload.username;
-            req.headers['x-role']     = payload.role;
+            if (payload.username) req.headers['x-username'] = payload.username;
+            if (payload.role)     req.headers['x-role']     = payload.role;
         } catch (err) {
             socket.write(`HTTP/1.1 ${err.status || 401} Unauthorized\r\nConnection: close\r\n\r\n`);
             socket.destroy();

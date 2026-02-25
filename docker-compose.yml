@@ -145,22 +145,22 @@ services:
         condition: service_started
     restart: unless-stopped
 
-  order:
-    build:
-      context: ./source-code
-      dockerfile: ./services/order-service/Dockerfile
-    container_name: order-service
-    expose:
-      - "3000"
-    networks:
-      - internal
-    environment:
-      - PORT=3000
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq-service:5672
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    restart: unless-stopped
+  # order:
+  #   build:
+  #     context: ./source-code
+  #     dockerfile: ./services/order-service/Dockerfile
+  #   container_name: order-service
+  #   expose:
+  #     - "3000"
+  #   networks:
+  #     - internal
+  #   environment:
+  #     - PORT=3000
+  #     - RABBITMQ_URL=amqp://guest:guest@rabbitmq-service:5672
+  #   depends_on:
+  #     rabbitmq:
+  #       condition: service_healthy
+  #   restart: unless-stopped
 
   items:
     build:
@@ -179,19 +179,19 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  payment:
-    build:
-      context: ./source-code
-      dockerfile: ./services/payment-service/Dockerfile
-    container_name: payment-service
-    networks:
-      - internal
-    environment:
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq-service:5672
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    restart: unless-stopped
+  # payment:
+  #   build:
+  #     context: ./source-code
+  #     dockerfile: ./services/payment-service/Dockerfile
+  #   container_name: payment-service
+  #   networks:
+  #     - internal
+  #   environment:
+  #     - RABBITMQ_URL=amqp://guest:guest@rabbitmq-service:5672
+  #   depends_on:
+  #     rabbitmq:
+  #       condition: service_healthy
+  #   restart: unless-stopped
 
 networks:
   internal:

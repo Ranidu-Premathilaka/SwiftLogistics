@@ -16,30 +16,35 @@ const config        = require('./config');
 const pubsub        = new PubSub(config.rabbitmq.url, config.rabbitmq.exchange, config.rabbitmq.queue);
 const internalRouter = new InternalRouter();
 
-const pendingItemRequests = new Map(); 
+const pendingItemRequests = new Map(); // correlationId → userId
 
 // ── RabbitMQ response handler ─────────────────────────────────────────────
 
-function handleWmsItemsResponse({correlationId,items}) {
-    console.log(`[ItemsService] Received items response from WMS: ${items.length} items`);
-    clientId = pendingItemRequests.get(correlationId);
-    data = {
-        persist: false,
-        userId : clientId,
-        payload : items,
+function handleWmsItemsResponse({ correlationId, items, error }) {
+    console.log(`[ItemsService] Received items response from WMS: correlationId=${correlationId}`);
+    const userId = pendingItemRequests.get(correlationId);
+    if (!userId) {
+        console.warn(`[ItemsService] No pending request for correlationId=${correlationId}`);
+        return;
     }
-    pubsub.publish(config.publishedRoutingKeys.notifyClientItemsResponse, data);
     pendingItemRequests.delete(correlationId);
+
+    pubsub.publish(config.publishedRoutingKeys.notifyClientItemsResponse, {
+        persist:  0,
+        userId,
+        payload: { event: 'items_response', items: items ?? [], error },
+    });
 }
 
 // ── HTTP route handler ────────────────────────────────────────────────────
 
 // GET /items
-async function getItems({'x-username': clientId}) {
-    const correlationId = `items_request_${Date.now()}`;
-    pendingItemRequests.set(correlationId, clientId);
+async function getItems({ 'x-username': userId }) {
+    const correlationId = `items_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+    pendingItemRequests.set(correlationId, userId);
     pubsub.publish(config.publishedRoutingKeys.wmsItemsRequest, { correlationId });
-    return "Requesting items from WMS";
+    return 'Items request queued';
 }
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────

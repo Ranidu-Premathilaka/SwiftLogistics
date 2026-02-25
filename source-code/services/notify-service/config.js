@@ -10,5 +10,5 @@ module.exports = {
   // Each horizontally-scaled instance of notify-service gets its own exclusive queue
   // so that ALL instances receive every notification and can serve whichever
   // client is connected to them.
-  subscribedRoutingKey: 'notify.*',
+  subscribedRoutingKey: 'notify.#',
 };

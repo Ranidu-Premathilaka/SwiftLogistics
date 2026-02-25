@@ -56,7 +56,7 @@ class internalRouter {
 
         if(this.routes[method] && this.routes[method][path]) {
             const routeInfo = this.routes[method][path];
-            return routeInfo.handler({ ...data, headers });
+            return routeInfo.handler({ ...headers, ...data });
             
         }else{
             throw new routingError(`Route not found: ${method} ${path}`, 404);

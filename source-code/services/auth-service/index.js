@@ -16,8 +16,13 @@ db.init();
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
-async function signup({ username, password }) {
-    console.log(`[Auth] signup attempt: username=${username}`);
+async function signup({ username, password, role = 'client' }) {
+    console.log(`[Auth] signup attempt: username=${username}, role=${role}`);
+
+    if (!['client', 'driver'].includes(role)) {
+        InternalRouter.sendRoutingError('Invalid role — must be client or driver', 400);
+    }
+
     const existing = await db.query('SELECT id FROM users WHERE username = $1', [username]);
     if (existing.rows.length > 0) {
         console.warn(`[Auth] signup failed: username=${username} already exists`);
@@ -26,16 +31,16 @@ async function signup({ username, password }) {
 
     const passwordHash = await bcrypt.hash(password, 10);
     await db.query(
-        'INSERT INTO users (username, password_hash) VALUES ($1, $2)',
-        [username, passwordHash]
+        'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)',
+        [username, passwordHash, role]
     );
-    console.log(`[Auth] signup success: username=${username}`);
+    console.log(`[Auth] signup success: username=${username}, role=${role}`);
     return { message: 'User created successfully' };
 }
 
 async function login({ username, password }) {
     console.log(`[Auth] login attempt: username=${username}`);
-    const result = await db.query('SELECT password_hash FROM users WHERE username = $1', [username]);
+    const result = await db.query('SELECT password_hash, role FROM users WHERE username = $1', [username]);
     if (result.rows.length === 0) {
         console.warn(`[Auth] login failed: username=${username} not found`);
         InternalRouter.sendRoutingError('Invalid credentials', 401);
@@ -47,10 +52,11 @@ async function login({ username, password }) {
         InternalRouter.sendRoutingError('Invalid credentials', 401);
     }
 
-    const accessToken  = jwt.sign({ username }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY });
-    const refreshToken = jwt.sign({ username }, JWT_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRY });
+    const { role } = result.rows[0];
+    const accessToken  = jwt.sign({ username, role }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY });
+    const refreshToken = jwt.sign({ username, role }, JWT_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRY });
     await db.query('INSERT INTO refresh_tokens (token, username) VALUES ($1, $2)', [refreshToken, username]);
-    console.log(`[Auth] login success: username=${username}`);
+    console.log(`[Auth] login success: username=${username}, role=${role}`);
     return { accessToken, refreshToken };
 }
 
@@ -64,8 +70,8 @@ async function refreshAccessToken({ refreshToken }) {
 
     try {
         const payload     = jwt.verify(refreshToken, JWT_SECRET);
-        const accessToken = jwt.sign({ username: payload.username }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY });
-        console.log(`[Auth] refresh success: username=${payload.username}`);
+        const accessToken = jwt.sign({ username: payload.username, role: payload.role }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY });
+        console.log(`[Auth] refresh success: username=${payload.username}, role=${payload.role}`);
         return { accessToken };
     } catch {
         await db.query('DELETE FROM refresh_tokens WHERE token = $1', [refreshToken]);

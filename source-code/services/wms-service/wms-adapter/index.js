@@ -25,7 +25,7 @@ const config = require('../config');
 
 class WMSAdapter {
     constructor({ legacyUrl } = {}) {
-        this.baseUrl = (legacyUrl || `http://localhost:${config.port}`) + '/api/wms';
+        this.baseUrl = (legacyUrl || `http://127.0.0.1:${config.port}`) + '/api/wms';
 
         const { url, exchange, queue } = config.rabbitmq;
         this.pubsub = new PubSub(url, exchange, queue);

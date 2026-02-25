@@ -12,8 +12,9 @@ module.exports = {
 
     publishedRoutingKeys: {
         // { correlationId } — request inventory list from WMS
-        wmsItemsRequest: 'wms.items.request',
-        notifyClientItemsResponse: 'notify.client.items_response',
+        wmsItemsRequest:            'wms.items.request',
+        // { persist, userId, payload } — push items to client via notify-service
+        notifyClientItemsResponse:  'notify.client.items_response',
     },
 
     subscribedRoutingKeys: {

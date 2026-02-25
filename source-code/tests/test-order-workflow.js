@@ -117,6 +117,10 @@ class NotificationCollector {
 
 const notifications = new NotificationCollector();
 
+async function delay(ms){
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 // ── Test Suite ─────────────────────────────────────────────────────────────
 
 (async () => {
@@ -127,7 +131,7 @@ const notifications = new NotificationCollector();
     await test('POST /auth/signup → 200 creates test user', async () => {
         const { status, body } = await request(
             'POST', '/auth/signup',
-            { username: USERNAME, password: PASSWORD },
+            { username: USERNAME, password: PASSWORD, role: 'client' },
             { 'x-request-id': `signup-${Date.now()}` },
         );
         assert(status === 200, `Expected 200, got ${status}: ${JSON.stringify(body)}`);
@@ -155,24 +159,26 @@ const notifications = new NotificationCollector();
 
     // ── 3. Browse inventory ───────────────────────────────────────────────
 
-    await test('GET /items → 200 returns warehouse inventory', async () => {
-        const { status, body } = await request(
+    await test('GET /items → queues request, WS delivers items_response', async () => {
+        const { status } = await request(
             'GET', '/items/',
             null,
             { Authorization: `Bearer ${accessToken}` },
         );
-        assert(status === 200,                      `Expected 200, got ${status}: ${JSON.stringify(body)}`);
-        assert(Array.isArray(body.items),           'body.items should be an array');
-        assert(body.items.length > 0,               'Inventory should have at least one item');
+        assert(status === 200, `Expected 200, got ${status}`);
 
-        body.items.forEach(item => {
+        const msg = await notifications.waitFor('items_response', 10000);
+        assert(Array.isArray(msg.payload.items),  'payload.items should be an array');
+        assert(msg.payload.items.length > 0,      'Inventory should have at least one item');
+
+        msg.payload.items.forEach(item => {
             assert(typeof item.itemId === 'string', 'item.itemId should be a string');
             assert(typeof item.name   === 'string', 'item.name should be a string');
             assert(typeof item.stock  === 'number', 'item.stock should be a number');
         });
 
         // Pick up to 2 in-stock items for the order
-        selectedItems = body.items
+        selectedItems = msg.payload.items
             .filter(i => i.stock >= 2)
             .slice(0, 2)
             .map(i => ({ itemId: i.itemId, quantity: 2 }));
@@ -181,6 +187,7 @@ const notifications = new NotificationCollector();
         console.log(`       selected: ${JSON.stringify(selectedItems)}`);
     });
 
+    await delay(1000000); 
     // ── 4. Create order ───────────────────────────────────────────────────
 
     await test('POST /order → 200 initiates order creation', async () => {
