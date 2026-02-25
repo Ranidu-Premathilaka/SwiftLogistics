@@ -68,7 +68,7 @@ wss.on('connection', async (ws, req) => {
     // ── Flush pending notifications (event + message) ────────────────────
     try {
         const { rows } = await db.query(
-            `SELECT id, type, payload
+            `SELECT id, payload
              FROM   pending_notifications
              WHERE  user_id   = $1
              AND    delivered = false
@@ -79,7 +79,7 @@ wss.on('connection', async (ws, req) => {
         if (rows.length > 0) {
             for (const row of rows) {
                 if (ws.readyState === OPEN) {
-                    ws.send(JSON.stringify({ type: row.type, payload: row.payload }));
+                    ws.send(JSON.stringify({ persist: 1, payload: row.payload }));
                 }
             }
             const ids = rows.map(r => r.id);
@@ -109,9 +109,10 @@ wss.on('connection', async (ws, req) => {
 
 // ── RabbitMQ message handler ──────────────────────────────────────────────
 async function handleNotification(message) {
-    const { type, userId, payload } = message;
+    // persist: 1 = store when offline (default), 0 = discard when offline
+    const { persist = 1, userId, payload } = message;
 
-    if (!type || !userId || !payload) {
+    if (!userId || !payload) {
         console.warn('[Notify] Malformed message received:', message);
         return;
     }
@@ -121,29 +122,29 @@ async function handleNotification(message) {
 
     if (onlineSockets.length > 0) {
         // Deliver to every active connection for this user
-        const frame = JSON.stringify({ type, payload });
+        const frame = JSON.stringify({ persist, payload });
         for (const ws of onlineSockets) {
             ws.send(frame);
         }
-        console.log(`[Notify] Delivered ${type} to ${userId} (${onlineSockets.length} socket(s))`);
+        console.log(`[Notify] Delivered notification (persist=${persist}) to ${userId} (${onlineSockets.length} socket(s))`);
         return;
     }
 
     // ── User is offline ───────────────────────────────────────────────────
-    if (type === 'command') {
-        // Commands are time-sensitive actions; discard when the user is offline
-        console.log(`[Notify] Discarded command for offline user: ${userId}`);
+    if (!persist) {
+        // Non-persistent notifications are discarded when the user is offline
+        console.log(`[Notify] Discarded non-persistent notification for offline user: ${userId}`);
         return;
     }
 
-    // type === 'event' | 'message' -> persist for delivery on next connect
+    // persist === 1 (default) -> store for delivery on next connect
     try {
         await db.query(
-            `INSERT INTO pending_notifications (user_id, type, payload)
-             VALUES ($1, $2, $3)`,
-            [userId, type, JSON.stringify(payload)]
+            `INSERT INTO pending_notifications (user_id, payload)
+             VALUES ($1, $2)`,
+            [userId, JSON.stringify(payload)]
         );
-        console.log(`[Notify] Stored pending ${type} for offline user: ${userId}`);
+        console.log(`[Notify] Stored pending notification for offline user: ${userId}`);
     } catch (err) {
         console.error('[Notify] Error storing pending notification:', err);
     }
@@ -152,7 +153,7 @@ async function handleNotification(message) {
 // ── Startup ───────────────────────────────────────────────────────────────
 async function start() {
     await pubsub.connect();
-    await pubsub.subscribe('notify.*', handleNotification);
+    await pubsub.subscribe(config.subscribedRoutingKey, handleNotification);
 
     server.listen(config.port, () => {
         console.log(`[Notify] Listening on port ${config.port} (queue: ${queueName})`);
