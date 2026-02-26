@@ -56,6 +56,36 @@ const cmsService = {
           UpdateOrderStatusResponse: { success: true, orderData },
         };
       },
+
+      async GetOrdersByUser({ clientId }) {
+        console.log('[CMS] GetOrdersByUser called for clientId:', clientId);
+        const { rows } = await db.query(
+            `SELECT order_id, client_id, item_list, status, created_at, updated_at
+             FROM   orders
+             WHERE  client_id = $1
+             ORDER  BY created_at DESC`,
+            [clientId]
+        );
+        const orders = rows.map(r => {
+            // Postgres returns JSONB as a parsed JS value, but SOAP's anyType
+            // serialization can collapse a single-item array into a plain object.
+            // Normalise itemList to always be an array.
+            const raw = r.item_list;
+            const itemList = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+            return {
+            orderId:   r.order_id,
+            clientId:  r.client_id,
+            itemList,
+            status:    r.status,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+            };
+        });
+        console.log(`[CMS] Found ${orders.length} order(s) for clientId=${clientId}`);
+        return {
+          GetOrdersByUserResponse: { success: true, orders: JSON.stringify(orders) },
+        };
+      },
     },
   },
 };

@@ -11,6 +11,7 @@ const internalRouter = new InternalRouter();
 const pendingPayments = new Map();
 
 
+
 // ── HTTP route handlers ────────────────────────────────────────────────────
 
 async function createOrder({itemList , 'x-request-id': idempotencyKey, 'x-username': clientId}) {
@@ -27,6 +28,26 @@ async function createOrder({itemList , 'x-request-id': idempotencyKey, 'x-userna
     await pubsub.publish(config.publishedRoutingKeys.createOrder, { correlationId, clientId, orderData});
     console.log(`[OrderService] sent order creation event, correlationId=${correlationId}`);
     return 'Order creation initiated';
+}
+
+/**
+ * GET /order
+ * Headers: x-username (injected by API Gateway), x-request-id
+ * Publishes cms.orders.requested; the actual order list is delivered via WebSocket.
+ */
+async function getOrders({ 'x-username': clientId}) {
+    if (!clientId) {
+        internalRouter.sendRoutingError('Missing required fields', 400);
+    }
+
+    // Encode the userId directly into the correlationId so the response handler
+    // can recover it without an in-memory map.
+    const correlationId = `userId-${clientId}`;
+    console.log(`[OrderService] getOrders: clientId=${clientId}, correlationId=${correlationId}`);
+
+    await pubsub.publish(config.publishedRoutingKeys.getOrders, { correlationId, userId: clientId });
+    console.log(`[OrderService] Published cms.orders.requested for clientId=${clientId}`);
+    return 'Order query initiated';
 }
 
 /**
@@ -187,12 +208,32 @@ async function handlePaymentFailed({ correlationId, orderId, error }) {
     }
 }
 
+/** order.cms.order_response — CMS adapter responded with orders for a user */
+async function handleCmsOrderResponse({ correlationId, orders }) {
+    if (!correlationId || !correlationId.startsWith('userId-')) {
+        console.error('[OrderService] handleCmsOrderResponse: missing or unrecognised correlationId', correlationId);
+        return;
+    }
+
+    // Recover the clientId directly from the correlationId — no map lookup needed.
+    const clientId = correlationId.slice('userId-'.length);
+    console.log(`[OrderService] Received ${Array.isArray(orders) ? orders.length : 0} order(s) for userId=${clientId}`);
+
+    await pubsub.publish(config.publishedRoutingKeys.notifyOrderQueryResponse, {
+        persist: 0,
+        userId:  clientId,
+        payload: { event: 'order_query_response', orders: orders ?? [] },
+    });
+    console.log(`[OrderService] Published notify.client.order_query_response for userId=${clientId}`);
+}
+
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────
 
 (async () => {
     internalRouter.registerRoute('POST',  '/', createOrder);
     internalRouter.registerRoute('PATCH', '/', updateOrderStatus);
+    internalRouter.registerRoute('GET',   '/', getOrders);
 
     await pubsub.connect();
     pubsub.subscribe(config.subscribedRoutingKeys.orderStatusUpdated,    handleOrderStatusUpdated);
@@ -200,6 +241,7 @@ async function handlePaymentFailed({ correlationId, orderId, error }) {
     pubsub.subscribe(config.subscribedRoutingKeys.wmsReservationFailed,  handleWmsReservationFailed);
     pubsub.subscribe(config.subscribedRoutingKeys.paymentCompleted,      handlePaymentCompleted);
     pubsub.subscribe(config.subscribedRoutingKeys.paymentFailed,         handlePaymentFailed);
+    pubsub.subscribe(config.subscribedRoutingKeys.cmsOrderResponse,      handleCmsOrderResponse);
 
     internalRouter.host(config.port);
     console.log(`[OrderService] Listening on port ${config.port}`);

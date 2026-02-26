@@ -86,6 +86,23 @@ class CMSAdapter {
         }
     }
 
+    async #handleGetOrdersByUser({ correlationId, userId }) {
+        console.log(`[CMSAdapter] getOrdersByUser: correlationId=${correlationId}, userId=${userId}`);
+        try {
+            const result    = await this.#sendSOAP('GetOrdersByUser', { clientId: userId });
+            const ordersRaw = result?.GetOrdersByUserResponse?.orders ?? '[]';
+            const orders    = typeof ordersRaw === 'string' ? JSON.parse(ordersRaw) : ordersRaw;
+            await this.pubsub.publish(config.publishedRoutingKeys.orderQueryResponse, {
+                correlationId,
+                userId,
+                orders,
+            });
+            console.log(`[CMSAdapter] Published order.cms.order_response for userId=${userId}, count=${orders.length}`);
+        } catch (err) {
+            console.error('[CMSAdapter] getOrdersByUser error:', err.message);
+        }
+    }
+
     // ── Start the adapter ─────────────────────────────────────────────────────
 
     async start() {
@@ -96,6 +113,7 @@ class CMSAdapter {
 
         await this.pubsub.subscribe(subscribedRoutingKeys.createOrder,       this.#handleCreateOrder.bind(this));
         await this.pubsub.subscribe(subscribedRoutingKeys.updateOrderStatus,  this.#handleUpdateOrderStatus.bind(this));
+        await this.pubsub.subscribe(subscribedRoutingKeys.getOrdersByUser,    this.#handleGetOrdersByUser.bind(this));
 
         console.log('[CMSAdapter] Listening for commands on RabbitMQ.');
     }

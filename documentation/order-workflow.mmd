@@ -1,3 +1,4 @@
+%%{init: {'theme': 'dark'}}%%
 sequenceDiagram
     actor Client
     participant GW as API Gateway
@@ -10,7 +11,7 @@ sequenceDiagram
     participant WMS as wms-adapter
     participant WMSDB as WMS Legacy (HTTP)
 
-    rect rgb(230, 245, 255)
+    rect rgb(15, 40, 80)
         note over Client, WMSDB: 1 — Browse Inventory
         Client->>GW: GET /items
         GW->>IS: GET / (x-username)
@@ -24,7 +25,7 @@ sequenceDiagram
         NS-->>Client: WS items_response { items }
     end
 
-    rect rgb(230, 255, 230)
+    rect rgb(15, 60, 25)
         note over Client, WMSDB: 2 — Create Order
         Client->>GW: POST /order { itemList }
         GW->>OS: POST / (x-username, x-request-id)
@@ -40,7 +41,7 @@ sequenceDiagram
         NS-->>Client: WS payment_intent_created { orderId, clientSecret, idempotencyKey }
     end
 
-    rect rgb(255, 250, 220)
+    rect rgb(70, 50, 10)
         note over Client, WMSDB: 3 — Confirm Order  (paymentToken = clientSecret)
         Client->>GW: PATCH /order { orderId, status:order_confirmed, data:{ paymentToken, itemList } }
         GW->>OS: PATCH / (x-username, x-request-id)

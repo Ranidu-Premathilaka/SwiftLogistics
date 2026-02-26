@@ -20,6 +20,8 @@ module.exports = {
     createOrder:       'cms.order.create',
     // { correlationId, orderId, status }
     updateOrderStatus: 'cms.order.update_status',
+    // { correlationId, userId }
+    getOrdersByUser:   'cms.orders.requested',
   },
 
   // Routing keys this adapter publishes on
@@ -30,6 +32,8 @@ module.exports = {
     orderStatusUpdated: 'order.status_updated',
     // { correlationId, orderId } — emitted after UpdateOrderStatus succeeds
     orderConfirmed: 'order.confirmed',
+    // { correlationId, userId, orders } — response to cms.orders.requested
+    orderQueryResponse: 'order.cms.order_response',
   },
 
 };

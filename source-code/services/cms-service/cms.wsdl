@@ -23,6 +23,14 @@
     <part name="orderData" type="xsd:anyType"/>
   </message>
 
+  <message name="GetOrdersByUserRequest">
+    <part name="clientId" type="xsd:string"/>
+  </message>
+  <message name="GetOrdersByUserResponse">
+    <part name="success" type="xsd:boolean"/>
+    <part name="orders"  type="xsd:anyType"/>
+  </message>
+
   <portType name="CMSPortType">
     <operation name="CreateOrder">
       <input  message="tns:CreateOrderRequest"/>
@@ -31,6 +39,10 @@
     <operation name="UpdateOrderStatus">
       <input  message="tns:UpdateOrderStatusRequest"/>
       <output message="tns:UpdateOrderStatusResponse"/>
+    </operation>
+    <operation name="GetOrdersByUser">
+      <input  message="tns:GetOrdersByUserRequest"/>
+      <output message="tns:GetOrdersByUserResponse"/>
     </operation>
   </portType>
 
@@ -45,6 +57,12 @@
 
     <operation name="UpdateOrderStatus">
       <soap:operation soapAction="UpdateOrderStatus"/>
+      <input><soap:body use="literal"/></input>
+      <output><soap:body use="literal"/></output>
+    </operation>
+
+    <operation name="GetOrdersByUser">
+      <soap:operation soapAction="GetOrdersByUser"/>
       <input><soap:body use="literal"/></input>
       <output><soap:body use="literal"/></output>
     </operation>

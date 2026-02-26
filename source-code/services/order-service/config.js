@@ -24,10 +24,13 @@ module.exports = {
         orderConfirmed:     'order.confirmed',
         // { correlationId, orderId } → tell WMS to release the reservation on payment failure
         releaseReservation: 'wms.order.release',
+        // { correlationId, userId } → request all orders for a user from CMS
+        getOrders:          'cms.orders.requested',
         // { persist, userId, payload } → consumed by notify-service
-        notifyReservationFailed: 'notify.order.reservation_failed',
-        notifyPaymentCompleted:  'notify.order.payment_completed',
-        notifyPaymentFailed:     'notify.order.payment_failed',
+        notifyReservationFailed:    'notify.order.reservation_failed',
+        notifyPaymentCompleted:     'notify.order.payment_completed',
+        notifyPaymentFailed:        'notify.order.payment_failed',
+        notifyOrderQueryResponse:   'notify.client.order_query_response',
     },
 
     subscribedRoutingKeys: {
@@ -41,5 +44,7 @@ module.exports = {
         paymentCompleted:      'order.payment.completed',
         // { correlationId, orderId, error }
         paymentFailed:         'order.payment.failed',
+        // { correlationId, userId, orders } — published by CMS adapter in response to getOrders
+        cmsOrderResponse:      'order.cms.order_response',
     }
 };
