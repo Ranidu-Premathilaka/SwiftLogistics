@@ -293,9 +293,9 @@ async function delay(ms){
 
         if (msg.payload.event === 'payment_completed') {
             assert(typeof msg.payload.transactionId === 'string', 'transactionId missing');
-            console.log(`       ✓ payment succeeded — transactionId: ${msg.payload.transactionId}`);
+            console.log(`     ${c.green}${c.bold}✔ payment succeeded${c.reset}  txn=${c.cyan}${msg.payload.transactionId}${c.reset}`);
         } else {
-            console.log(`       ✓ payment failed (expected ~10%) — reason: ${msg.payload.reason}`);
+            console.log(`     ${c.yellow}⚠ payment failed${c.reset} (expected ~10%)  reason=${c.yellow}${msg.payload.reason}${c.reset}`);
         }
     });
 
@@ -321,6 +321,7 @@ async function delay(ms){
         const intentMsg = await notifications.waitFor('payment_intent_created', 20000);
         const badOrderId = intentMsg.payload.orderId;
         assert(typeof badOrderId === 'string', 'orderId missing from payment_intent_created');
+        console.log(`     ${c.gray}bad orderId:${c.reset} ${c.cyan}${badOrderId}${c.reset}`);
 
         // Confirm the bad order
         await request(
@@ -343,7 +344,7 @@ async function delay(ms){
         const failMsg = await notifications.waitFor('reservation_failed', 20000);
         assert(failMsg.payload.orderId === badOrderId,  `orderId mismatch: ${failMsg.payload.orderId}`);
         assert(typeof failMsg.payload.reason === 'string', 'reason field missing');
-        console.log(`       ✓ reservation_failed received — reason: ${failMsg.payload.reason}`);
+        console.log(`     ${c.red}${c.bold}✔ reservation_failed${c.reset}  reason=${c.yellow}${failMsg.payload.reason}${c.reset}`);
     });
 
     // ── Teardown ──────────────────────────────────────────────────────────
