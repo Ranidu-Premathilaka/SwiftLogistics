@@ -14,6 +14,5 @@ module.exports = {
     optimizeRoute: 'rms.route.optimize',
   },
 
-  // Routing key prefix used when publishing replies
   replyRoutingKey: 'rms.reply',
 };

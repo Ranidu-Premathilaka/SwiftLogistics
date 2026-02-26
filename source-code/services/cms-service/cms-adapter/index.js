@@ -74,10 +74,14 @@ class CMSAdapter {
         try {
             const result   = await this.#sendSOAP('UpdateOrderStatus', { orderId, status });
             const raw      = result?.UpdateOrderStatusResponse?.orderData ?? {};
+            // Normalize itemList — SOAP may collapse a single-element array into a plain object
+            const rawItems = raw.itemList;
+            const itemList = Array.isArray(rawItems) ? rawItems : (rawItems ? [rawItems] : []);
             const orderData = {
-                orderId:   raw.orderId   ?? orderId,
-                status:    raw.status    ?? status,
-                itemList:  raw.itemList  ?? [],
+                orderId:     raw.orderId     ?? orderId,
+                status:      raw.status      ?? status,
+                itemList,
+                destination: raw.destination ?? null,
             };
             await this.pubsub.publish(config.publishedRoutingKeys.orderStatusUpdated, { correlationId, orderData });
             console.log(`[CMSAdapter] Published order.status_updated for orderId=${orderId}`);
@@ -103,6 +107,22 @@ class CMSAdapter {
         }
     }
 
+    async #handleGetNextPendingDelivery({ correlationId }) {
+        console.log(`[CMSAdapter] getNextPendingDelivery: correlationId=${correlationId}`);
+        try {
+            const result   = await this.#sendSOAP('GetNextPendingDelivery', {});
+            const orderRaw = result?.GetNextPendingDeliveryResponse?.order ?? null;
+            const order    = typeof orderRaw === 'string' ? JSON.parse(orderRaw) : orderRaw;
+            await this.pubsub.publish(config.publishedRoutingKeys.deliveryOrderResponse, {
+                correlationId,
+                order,
+            });
+            console.log(`[CMSAdapter] Published order.cms.delivery_response, orderId=${order?.orderId ?? 'none'}`);
+        } catch (err) {
+            console.error('[CMSAdapter] getNextPendingDelivery error:', err.message);
+        }
+    }
+
     // ── Start the adapter ─────────────────────────────────────────────────────
 
     async start() {
@@ -111,9 +131,10 @@ class CMSAdapter {
 
         const { subscribedRoutingKeys } = config;
 
-        await this.pubsub.subscribe(subscribedRoutingKeys.createOrder,       this.#handleCreateOrder.bind(this));
-        await this.pubsub.subscribe(subscribedRoutingKeys.updateOrderStatus,  this.#handleUpdateOrderStatus.bind(this));
-        await this.pubsub.subscribe(subscribedRoutingKeys.getOrdersByUser,    this.#handleGetOrdersByUser.bind(this));
+        await this.pubsub.subscribe(subscribedRoutingKeys.createOrder,            this.#handleCreateOrder.bind(this));
+        await this.pubsub.subscribe(subscribedRoutingKeys.updateOrderStatus,       this.#handleUpdateOrderStatus.bind(this));
+        await this.pubsub.subscribe(subscribedRoutingKeys.getOrdersByUser,         this.#handleGetOrdersByUser.bind(this));
+        await this.pubsub.subscribe(subscribedRoutingKeys.getNextPendingDelivery,  this.#handleGetNextPendingDelivery.bind(this));
 
         console.log('[CMSAdapter] Listening for commands on RabbitMQ.');
     }

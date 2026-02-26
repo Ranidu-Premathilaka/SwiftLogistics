@@ -21,7 +21,7 @@ const config  = require('../config');
 
 class ROSAdapter {
     constructor({ legacyUrl } = {}) {
-        this.baseUrl = (legacyUrl || `http://localhost:${config.port}`) + '/api/ros';
+        this.baseUrl = (legacyUrl || `http://127.0.0.1:${config.port}`) + '/api/ros';
 
         const { url, exchange, queue } = config.rabbitmq;
         this.pubsub = new PubSub(url, exchange, queue);
@@ -29,8 +29,8 @@ class ROSAdapter {
 
     // ── Internal: call the legacy ROS HTTP service ────────────────────────────
 
-    async #optimizeRoute(origin, waypoints) {
-        const res = await axios.post(`${this.baseUrl}/optimize-route`, { origin, waypoints });
+    async #optimizeRoute(locations) {
+        const res = await axios.post(`${this.baseUrl}/optimize-route`, { locations });
         return res.data;
     }
 
@@ -55,11 +55,11 @@ class ROSAdapter {
 
         const { routingKeys } = config;
 
-        // rms.route.optimize — { correlationId, origin, waypoints }
-        await this.pubsub.subscribe(routingKeys.optimizeRoute, async ({ correlationId, origin, waypoints }) => {
-            console.log(`[ROSAdapter] optimizeRoute: origin=${origin}, waypoints=${JSON.stringify(waypoints)}`);
+        // rms.route.optimize — { correlationId, locations: { id, location }[] }
+        await this.pubsub.subscribe(routingKeys.optimizeRoute, async ({ correlationId, locations }) => {
+            console.log(`[ROSAdapter] optimizeRoute: ${locations?.length} location(s)`);
             try {
-                const result = await this.#optimizeRoute(origin, waypoints);
+                const result = await this.#optimizeRoute(locations);
                 await this.#reply(correlationId, result);
             } catch (err) {
                 console.error('[ROSAdapter] optimizeRoute error:', err.message);

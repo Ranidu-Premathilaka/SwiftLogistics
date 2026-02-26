@@ -3,10 +3,11 @@ module.exports = {
     // Docker DNS resolves these hostnames automatically within the internal network.
     // Add a new entry here when a new service is added.
     serviceMap: {
-        'auth':   'http://auth-service:3000',
-        'notify': 'http://notify-service:3000',
-        'order':  'http://order-service:3000',
-        'items':  'http://items-service:3000',
+        'auth':      'http://auth-service:3000',
+        'notify':    'http://notify-service:3000',
+        'order':     'http://order-service:3000',
+        'items':     'http://items-service:3000',
+        'deliveries': 'http://delivery-service:3000',
     },
 
     // Routes that bypass JWT validation (prefix match).

@@ -11,18 +11,22 @@ const http = require("http");
 const { port } = require("./config");
 
 /**
- * Fake route-optimization logic.
- * In production this would call a real solver / mapping API.
+ * Dummy delivery-path optimizer.
+ * Shuffles the supplied { id, location } objects to emulate a "best path" algorithm.
  */
-function optimizeRoute(origin, waypoints) {
-  // Simple mock: reverse the waypoints and return a made-up distance/time
-  const optimized = [origin, ...[...waypoints].reverse()];
+function optimizeRoute(locations) {
+  if (!Array.isArray(locations) || locations.length === 0) {
+    return { optimizedPath: [] };
+  }
 
-  return {
-    optimizedRoute: optimized,
-    totalDistance: optimized.length * 12.5, // km (mock)
-    estimatedTime: `${optimized.length * 8} mins`, // mock
-  };
+  // Fisher-Yates shuffle — mimics a real solver returning an optimal ordering
+  const path = [...locations];
+  for (let i = path.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [path[i], path[j]] = [path[j], path[i]];
+  }
+
+  return { optimizedPath: path };
 }
 
 /**
@@ -48,17 +52,17 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "POST" && req.url === "/api/ros/optimize-route") {
     try {
       const body = JSON.parse(await readBody(req));
-      const { origin, waypoints } = body;
+      const { locations } = body;
 
-      if (!origin || !Array.isArray(waypoints)) {
+      if (!Array.isArray(locations)) {
         res.writeHead(400, { "Content-Type": "application/json" });
         return res.end(
-          JSON.stringify({ error: "origin (string) and waypoints (array) are required" })
+          JSON.stringify({ error: "locations (array of { id, location } objects) is required" })
         );
       }
 
-      console.log("optimize-route called:", origin, waypoints);
-      const result = optimizeRoute(origin, waypoints);
+      console.log("optimize-route called, locations:", locations);
+      const result = optimizeRoute(locations);
 
       res.writeHead(200, { "Content-Type": "application/json" });
       return res.end(JSON.stringify(result));

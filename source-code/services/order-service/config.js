@@ -31,6 +31,12 @@ module.exports = {
         notifyPaymentCompleted:     'notify.order.payment_completed',
         notifyPaymentFailed:        'notify.order.payment_failed',
         notifyOrderQueryResponse:   'notify.client.order_query_response',
+        // { correlationId, count } → CMS adapter GetNextPendingDelivery
+        cmsDeliveryRequestNext:     'cms.delivery.request_next',
+        // { correlationId, order } → delivery-service
+        deliveryOrderResponse:      'delivery.order.response',
+        // { correlationId } → delivery-service (all status updates applied)
+        orderCollected:             'delivery.order.collected',
     },
 
     subscribedRoutingKeys: {
@@ -46,5 +52,11 @@ module.exports = {
         paymentFailed:         'order.payment.failed',
         // { correlationId, userId, orders } — published by CMS adapter in response to getOrders
         cmsOrderResponse:      'order.cms.order_response',
+        // { correlationId, count, driverUsername } — from delivery-service
+        deliveryRequestNext:   'order.delivery.request_next',
+        // { correlationId, orders } — from CMS adapter after GetNextPendingDelivery
+        cmsDeliveryResponse:   'order.cms.delivery_response',
+        // { correlationId, orderIds } — from delivery-service
+        markCollected:         'delivery.order.mark_collected',
     }
 };

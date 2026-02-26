@@ -22,6 +22,8 @@ module.exports = {
     updateOrderStatus: 'cms.order.update_status',
     // { correlationId, userId }
     getOrdersByUser:   'cms.orders.requested',
+    // { correlationId, count } — from order-service on behalf of delivery-service
+    getNextPendingDelivery: 'cms.delivery.request_next',
   },
 
   // Routing keys this adapter publishes on
@@ -34,6 +36,8 @@ module.exports = {
     orderConfirmed: 'order.confirmed',
     // { correlationId, userId, orders } — response to cms.orders.requested
     orderQueryResponse: 'order.cms.order_response',
+    // { correlationId, orders } — response to cms.delivery.request_next
+    deliveryOrderResponse: 'order.cms.delivery_response',
   },
 
 };

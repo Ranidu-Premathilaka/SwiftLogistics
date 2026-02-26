@@ -186,6 +186,37 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  delivery:
+    build:
+      context: ./source-code
+      dockerfile: ./services/delivery-service/Dockerfile
+    container_name: delivery-service
+    expose:
+      - "3000"
+    networks:
+      - internal
+    environment:
+      - PORT=3000
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq-service:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  route:
+    build:
+      context: ./source-code
+      dockerfile: ./services/route-service/Dockerfile
+    container_name: route-service
+    networks:
+      - internal
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq-service:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
 networks:
   internal:
     driver: bridge

@@ -27,12 +27,15 @@ const cmsService = {
       async CreateOrder({ clientId, orderData }) {
         const orderId = `ORD-${crypto.randomUUID()}`;
         console.log('[CMS] CreateOrder called, generated orderId:', orderId);
+        // Normalize itemList — SOAP may collapse a single-element array into a plain object
+        const rawItems = orderData?.itemList;
+        const itemList = Array.isArray(rawItems) ? rawItems : (rawItems ? [rawItems] : []);
         await db.query(
-            `INSERT INTO orders (order_id, client_id, item_list, status)
-             VALUES ($1, $2, $3, 'pending')`,
-            [orderId, clientId, JSON.stringify(orderData?.itemList ?? [])]
+            `INSERT INTO orders (order_id, client_id, item_list, destination, status)
+             VALUES ($1, $2, $3, $4, 'pending_payment')`,
+            [orderId, clientId, JSON.stringify(itemList), orderData?.destination ?? null]
         );
-        console.log(`[CMS] Order stored in DB: orderId=${orderId}, status='pending'`);
+        console.log(`[CMS] Order stored in DB: orderId=${orderId}, status='pending_payment', destination=${orderData?.destination}`);
         return {
           CreateOrderResponse: { success: true, orderId },
         };
@@ -44,13 +47,13 @@ const cmsService = {
             `UPDATE orders
              SET    status = $1, updated_at = NOW()
              WHERE  order_id = $2
-             RETURNING order_id, client_id, item_list, status`,
+             RETURNING order_id, client_id, item_list, destination, status`,
             [status, orderId]
         );
         const row = rows[0];
         console.log(`[CMS] Order status updated in DB: orderId=${orderId}, status=${status}`);
         const orderData = row
-            ? { orderId: row.order_id, clientId: row.client_id, itemList: row.item_list, status: row.status }
+            ? { orderId: row.order_id, clientId: row.client_id, itemList: row.item_list, destination: row.destination ?? null, status: row.status }
             : { orderId, status };
         return {
           UpdateOrderStatusResponse: { success: true, orderData },
@@ -60,30 +63,58 @@ const cmsService = {
       async GetOrdersByUser({ clientId }) {
         console.log('[CMS] GetOrdersByUser called for clientId:', clientId);
         const { rows } = await db.query(
-            `SELECT order_id, client_id, item_list, status, created_at, updated_at
+            `SELECT order_id, client_id, item_list, destination, status, created_at, updated_at
              FROM   orders
              WHERE  client_id = $1
              ORDER  BY created_at DESC`,
             [clientId]
         );
         const orders = rows.map(r => {
-            // Postgres returns JSONB as a parsed JS value, but SOAP's anyType
-            // serialization can collapse a single-item array into a plain object.
-            // Normalise itemList to always be an array.
             const raw = r.item_list;
             const itemList = Array.isArray(raw) ? raw : (raw ? [raw] : []);
             return {
-            orderId:   r.order_id,
-            clientId:  r.client_id,
+            orderId:     r.order_id,
+            clientId:    r.client_id,
             itemList,
-            status:    r.status,
-            createdAt: r.created_at,
-            updatedAt: r.updated_at,
+            destination: r.destination ?? null,
+            status:      r.status,
+            createdAt:   r.created_at,
+            updatedAt:   r.updated_at,
             };
         });
         console.log(`[CMS] Found ${orders.length} order(s) for clientId=${clientId}`);
         return {
           GetOrdersByUserResponse: { success: true, orders: JSON.stringify(orders) },
+        };
+      },
+
+      async GetNextPendingDelivery() {
+        console.log('[CMS] GetNextPendingDelivery called');
+        const { rows } = await db.query(
+            `SELECT order_id, client_id, item_list, destination, status, created_at
+             FROM   orders
+             WHERE  status = 'pending_delivery'
+             ORDER  BY created_at ASC
+             LIMIT  1`,
+            []
+        );
+        const r = rows[0] ?? null;
+        let order = null;
+        if (r) {
+            const raw      = r.item_list;
+            const itemList = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+            order = {
+                orderId:      r.order_id,
+                clientId:     r.client_id,
+                itemList,
+                storageCount: itemList.length,
+                destination:  r.destination ?? null,
+                status:       r.status,
+            };
+        }
+        console.log(`[CMS] GetNextPendingDelivery → orderId=${order?.orderId ?? 'none'}`);
+        return {
+          GetNextPendingDeliveryResponse: { success: true, order: order ? JSON.stringify(order) : null },
         };
       },
     },

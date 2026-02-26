@@ -1,0 +1,91 @@
+%%{init: {'theme': 'dark'}}%%
+sequenceDiagram
+    actor Driver
+    participant GW as API Gateway
+    participant DS as delivery-service
+    participant OS as order-service
+    participant CMS as cms-adapter
+    participant CMSDB as CMS Legacy (SOAP)
+    participant RS as route-service
+    participant RMS as rms-adapter
+    participant RMSDB as RMS Legacy (HTTP)
+    participant NS as notify-service
+
+    rect rgb(15, 40, 80)
+        note over OS, RS: 0 — Background: Route Index Maintenance
+        note over OS, RS: Whenever any order transitions status, CMS adapter publishes order.status_updated.
+        CMS-->>OS: order.status_updated { correlationId, orderData: { orderId, status, destination } }
+        OS-->>OS: (handles own status logic)
+        CMS-->>RS: order.status_updated { correlationId, orderData }
+        alt status = pending_delivery
+            note right of RS: orderLocationIndex.set(orderId, destination)
+        else status in removal set (on_route / delivered / cancelled / failed)
+            note right of RS: orderLocationIndex.delete(orderId)
+        end
+    end
+
+    rect rgb(15, 60, 25)
+        note over Driver, NS: 1 — Driver Requests Delivery Assignment
+        Driver->>GW: POST /deliveries { count } (x-role: driver, x-username, x-request-id)
+        GW->>DS: POST / (headers forwarded)
+        note right of DS: Store pendingRequests[correlationId] = { driverUsername, count }
+        DS-->>GW: 200 "Delivery request initiated"
+        GW-->>Driver: 200 "Delivery request initiated"
+    end
+
+    rect rgb(70, 50, 10)
+        note over DS, CMSDB: 2 — Fetch Oldest Pending Delivery Order
+        DS-->>OS: order.delivery.request_next { correlationId }
+        OS-->>CMS: cms.delivery.request_next { correlationId }
+        CMS->>CMSDB: GetNextPendingDelivery (SOAP) {}
+        note right of CMSDB: SELECT ... WHERE status='pending_delivery' ORDER BY created_at ASC LIMIT 1
+        CMSDB-->>CMS: { success, order: { orderId, clientId, itemList, storageCount, destination } | null }
+        CMS-->>OS: order.cms.delivery_response { correlationId, order }
+        OS-->>DS: delivery.order.response { correlationId, order }
+
+        alt No pending delivery orders
+            note right of DS: Fetch driverUsername from pendingRequests, delete entry
+            DS-->>NS: notify.driver.route { persist:0, userId, payload: { event, message, route:[] } }
+            NS-->>Driver: WS driver_route { message: "No pending delivery orders available" }
+        end
+    end
+
+    rect rgb(50, 15, 60)
+        note over DS, RMSDB: 3 — Build & Optimise Delivery Route
+        note right of DS: Fetch { driverUsername, count } from pendingRequests, delete entry
+        note right of DS: Store pendingRoutes[correlationId] = { driverUsername }
+        DS-->>RS: route.delivery.path_requested { correlationId, anchorOrder: { orderId, location }, count }
+
+        note right of RS: findClosestStops(anchorOrder, maxStops)<br/>Reads orderLocationIndex, skips anchor,<br/>returns first (count-1) entries as { id, location }[]<br/>(dummy — real impl uses haversine distance)
+        note right of RS: stops = [{ id: anchor.orderId, location }, ...closestStops]
+
+        RS-->>RMS: rms.route.optimize { correlationId, locations: stops }
+        RMS->>RMSDB: POST /api/ros/optimize-route { locations }
+        note right of RMSDB: Fisher-Yates shuffle — dummy path solver
+        RMSDB-->>RMS: { optimizedPath: [{ id, location }, ...] }
+        RMS-->>RS: rms.reply { correlationId, success, data: { optimizedPath } }
+
+        note right of RS: Map id → orderId on each stop
+        RS-->>DS: delivery.route.path_response { correlationId, optimizedPath: [{ orderId, location }] }
+    end
+
+    rect rgb(60, 20, 20)
+        note over DS, NS: 4 — Mark Orders On-Route & Notify Driver
+        note right of DS: orderIds = optimizedPath.map(s => s.orderId)
+        note right of DS: Store pendingNotifications[correlationId] = { driverUsername, route: optimizedPath }
+        note right of DS: Delete pendingRoutes[correlationId]
+        DS-->>OS: delivery.order.mark_collected { correlationId, orderIds }
+
+        loop For each orderId (parallel)
+            OS-->>CMS: cms.order.update_status { correlationId, orderId, status: on_route }
+            CMS->>CMSDB: UpdateOrderStatus (SOAP) { orderId, status: on_route }
+            CMSDB-->>CMS: { success, orderData }
+            CMS-->>OS: order.status_updated { correlationId, orderData }
+            note right of RS: RS receives order.status_updated → removes orderId from index
+        end
+
+        OS-->>DS: delivery.order.collected { correlationId }
+        note right of DS: Fetch { driverUsername, route } from pendingNotifications, delete entry
+        DS-->>NS: notify.driver.route { persist:0, userId: driverUsername, payload: { event: driver_route, route } }
+        NS-->>Driver: WS driver_route { route: [{ orderId, location }, ...] }
+    end

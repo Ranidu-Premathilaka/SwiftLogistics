@@ -10,19 +10,25 @@ const internalRouter = new InternalRouter();
 // Cleared once payment is resolved (success or failure).
 const pendingPayments = new Map();
 
+// In-memory store: correlationId → driverUsername
+// Populated when order.delivery.request_next is received.
+// Cleared once order.cms.delivery_response is forwarded.
+const pendingDeliveryRequests = new Map();
+
 
 
 // ── HTTP route handlers ────────────────────────────────────────────────────
 
-async function createOrder({itemList , 'x-request-id': idempotencyKey, 'x-username': clientId}) {
+async function createOrder({itemList, destination, 'x-request-id': idempotencyKey, 'x-username': clientId}) {
     if (!clientId || !itemList|| !idempotencyKey) {
         internalRouter.sendRoutingError('Missing required fields', 400);
     }
 
-    console.log(`[OrderService] createOrder: clientId=${clientId}`);
+    console.log(`[OrderService] createOrder: clientId=${clientId}, destination=${destination}`);
     const correlationId = idempotencyKey;
     orderData = {
-        itemList
+        itemList,
+        destination: destination,
     };
 
     await pubsub.publish(config.publishedRoutingKeys.createOrder, { correlationId, clientId, orderData});
@@ -180,6 +186,14 @@ async function handlePaymentCompleted({ correlationId, orderId, transactionId })
             payload: { event: 'payment_completed', orderId, transactionId },
         });
     }
+
+    // Transition the order to pending_delivery so the delivery service can pick it up
+    await pubsub.publish(config.publishedRoutingKeys.updateOrderStatus, {
+        correlationId: `pending-delivery-${orderId}`,
+        orderId,
+        status: 'pending_delivery',
+    });
+    console.log(`[OrderService] Transitioning orderId=${orderId} to pending_delivery`);
 }
 
 /** order.payment.failed — PaymentService charge was declined */
@@ -227,6 +241,50 @@ async function handleCmsOrderResponse({ correlationId, orders }) {
     console.log(`[OrderService] Published notify.client.order_query_response for userId=${clientId}`);
 }
 
+/** order.delivery.request_next — delivery-service wants the oldest pending delivery order */
+async function handleDeliveryRequestNext({ correlationId}) {
+    if (!correlationId) {
+        console.error('[OrderService] handleDeliveryRequestNext: missing fields');
+        return;
+    }
+    console.log(`[OrderService] delivery request for the oldest order`);
+    // Store count alongside driverUsername so it can be threaded through to route-service
+    // CMS always returns the single oldest pending_delivery order — count is handled by route-service
+    await pubsub.publish(config.publishedRoutingKeys.cmsDeliveryRequestNext, { correlationId });
+}
+
+/** order.cms.delivery_response — CMS returned the next pending delivery order */
+async function handleCmsDeliveryResponse({ correlationId, order }) {
+    if (!correlationId) {
+        console.error('[OrderService] handleCmsDeliveryResponse: missing correlationId');
+        return;
+    }
+    console.log(`[OrderService] CMS returned next pending delivery order=${order?.orderId ?? 'none'}`);
+    await pubsub.publish(config.publishedRoutingKeys.deliveryOrderResponse, { correlationId, order: order ?? null });
+}
+
+/** delivery.order.mark_collected — delivery-service requests status updates to on_route */
+async function handleMarkCollected({ correlationId, orderIds }) {
+    if (!correlationId || !Array.isArray(orderIds)) {
+        console.error('[OrderService] handleMarkCollected: missing fields');
+        return;
+    }
+    console.log(`[OrderService] Marking ${orderIds.length} order(s) as on_route`);
+
+    // Publish a CMS status update for every order in parallel
+    await Promise.all(orderIds.map(orderId =>
+        pubsub.publish(config.publishedRoutingKeys.updateOrderStatus, {
+            correlationId: `collected-${correlationId}-${orderId}`,
+            orderId,
+            status: 'on_route',
+        })
+    ));
+
+    // Confirm back to delivery-service so it can notify the driver
+    await pubsub.publish(config.publishedRoutingKeys.orderCollected, { correlationId });
+    console.log(`[OrderService] Published delivery.order.collected for correlationId=${correlationId}`);
+}
+
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────
 
@@ -242,6 +300,9 @@ async function handleCmsOrderResponse({ correlationId, orders }) {
     pubsub.subscribe(config.subscribedRoutingKeys.paymentCompleted,      handlePaymentCompleted);
     pubsub.subscribe(config.subscribedRoutingKeys.paymentFailed,         handlePaymentFailed);
     pubsub.subscribe(config.subscribedRoutingKeys.cmsOrderResponse,      handleCmsOrderResponse);
+    pubsub.subscribe(config.subscribedRoutingKeys.deliveryRequestNext,   handleDeliveryRequestNext);
+    pubsub.subscribe(config.subscribedRoutingKeys.cmsDeliveryResponse,   handleCmsDeliveryResponse);
+    pubsub.subscribe(config.subscribedRoutingKeys.markCollected,         handleMarkCollected);
 
     internalRouter.host(config.port);
     console.log(`[OrderService] Listening on port ${config.port}`);
