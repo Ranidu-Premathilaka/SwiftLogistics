@@ -9,14 +9,12 @@
  *      the original correlationId so callers can match responses.
  *
  * Routing keys subscribed:
- *   cms.client.orders.get   — { clientId }
- *   cms.order.info.get      — { orderId }
- *   cms.order.create        — { orderData, transactionInfo }
- *   cms.order.update        — { orderId, updateData }
- *   cms.order.delete        — { orderId }
+ *   cms.order.create        — { correlationId, clientId, orderData: { itemList, ... } }
+ *   cms.order.update_status — { correlationId, orderId, status, itemList }
  *
- * Reply routing key (publisher):
- *   cms.reply  — { correlationId, success, data?, error? }
+ * Published routing keys:
+ *   order.created   — { correlationId, clientId, orderData: { orderId, itemList, ... } }
+ *   order.confirmed — { correlationId, orderId, itemList }
  */
 
 const soap    = require('soap');
@@ -50,18 +48,42 @@ class CMSAdapter {
         return result;
     }
 
-    // ── Reply helpers ─────────────────────────────────────────────────────────
+    // ── Handlers ──────────────────────────────────────────────────────────────
 
-    async #reply(correlationId, data) {
-        await this.pubsub.publish(config.replyRoutingKey, { correlationId, success: true, data });
+    async #handleCreateOrder({ correlationId, clientId, orderData }) {
+        console.log(`[CMSAdapter] createOrder: correlationId=${correlationId}`);
+        try {
+            const result  = await this.#sendSOAP('CreateOrder', { clientId, orderData });
+            const orderId = result?.CreateOrderResponse?.orderId;
+            if (!orderId) throw new Error('CMS did not return an orderId');
+
+            const enrichedOrderData = { ...orderData, orderId };
+            await this.pubsub.publish(config.publishedRoutingKeys.orderCreated, {
+                correlationId,
+                clientId,
+                orderData: enrichedOrderData,
+            });
+            console.log(`[CMSAdapter] Published order.created for orderId=${orderId}`);
+        } catch (err) {
+            console.error('[CMSAdapter] createOrder error:', err.message);
+        }
     }
 
-    async #replyError(correlationId, error) {
-        await this.pubsub.publish(config.replyRoutingKey, {
-            correlationId,
-            success: false,
-            error: error instanceof Error ? error.message : String(error),
-        });
+    async #handleUpdateOrderStatus({ correlationId, orderId, status }) {
+        console.log(`[CMSAdapter] updateOrderStatus: orderId=${orderId}, status=${status}`);
+        try {
+            const result   = await this.#sendSOAP('UpdateOrderStatus', { orderId, status });
+            const raw      = result?.UpdateOrderStatusResponse?.orderData ?? {};
+            const orderData = {
+                orderId:   raw.orderId   ?? orderId,
+                status:    raw.status    ?? status,
+                itemList:  raw.itemList  ?? [],
+            };
+            await this.pubsub.publish(config.publishedRoutingKeys.orderStatusUpdated, { correlationId, orderData });
+            console.log(`[CMSAdapter] Published order.status_updated for orderId=${orderId}`);
+        } catch (err) {
+            console.error('[CMSAdapter] updateOrderStatus error:', err.message);
+        }
     }
 
     // ── Start the adapter ─────────────────────────────────────────────────────
@@ -70,67 +92,10 @@ class CMSAdapter {
         await this.pubsub.connect();
         await this.#initSoap();
 
-        const { routingKeys } = config;
+        const { subscribedRoutingKeys } = config;
 
-        // cms.client.orders.get — { correlationId, clientId }
-        await this.pubsub.subscribe(routingKeys.getClientOrders, async ({ correlationId, clientId }) => {
-            console.log(`[CMSAdapter] getClientOrders: clientId=${clientId}`);
-            try {
-                const res = await this.#sendSOAP('GetClientOrders', { clientId });
-                await this.#reply(correlationId, res.GetClientOrdersResponse.orders);
-            } catch (err) {
-                console.error('[CMSAdapter] getClientOrders error:', err.message);
-                await this.#replyError(correlationId, err);
-            }
-        });
-
-        // cms.order.info.get — { correlationId, orderId }
-        await this.pubsub.subscribe(routingKeys.getOrderInfo, async ({ correlationId, orderId }) => {
-            console.log(`[CMSAdapter] getOrderInfo: orderId=${orderId}`);
-            try {
-                const res = await this.#sendSOAP('GetOrderInfo', { orderId });
-                await this.#reply(correlationId, res.GetOrderInfoResponse.order);
-            } catch (err) {
-                console.error('[CMSAdapter] getOrderInfo error:', err.message);
-                await this.#replyError(correlationId, err);
-            }
-        });
-
-        // cms.order.create — { correlationId, orderData, transactionInfo }
-        await this.pubsub.subscribe(routingKeys.createOrder, async ({ correlationId, orderData, transactionInfo }) => {
-            console.log('[CMSAdapter] createOrder');
-            try {
-                const res = await this.#sendSOAP('CreateOrder', { orderData, transactionInfo });
-                await this.#reply(correlationId, { success: res.CreateOrderResponse.success });
-            } catch (err) {
-                console.error('[CMSAdapter] createOrder error:', err.message);
-                await this.#replyError(correlationId, err);
-            }
-        });
-
-        // cms.order.update — { correlationId, orderId, updateData }
-        await this.pubsub.subscribe(routingKeys.updateOrder, async ({ correlationId, orderId, updateData }) => {
-            console.log(`[CMSAdapter] updateOrder: orderId=${orderId}`);
-            try {
-                const res = await this.#sendSOAP('UpdateOrder', { orderId, updateData });
-                await this.#reply(correlationId, res.UpdateOrderResponse.updatedOrder);
-            } catch (err) {
-                console.error('[CMSAdapter] updateOrder error:', err.message);
-                await this.#replyError(correlationId, err);
-            }
-        });
-
-        // cms.order.delete — { correlationId, orderId }
-        await this.pubsub.subscribe(routingKeys.deleteOrder, async ({ correlationId, orderId }) => {
-            console.log(`[CMSAdapter] deleteOrder: orderId=${orderId}`);
-            try {
-                const res = await this.#sendSOAP('DeleteOrder', { orderId });
-                await this.#reply(correlationId, { success: res.DeleteOrderResponse.success });
-            } catch (err) {
-                console.error('[CMSAdapter] deleteOrder error:', err.message);
-                await this.#replyError(correlationId, err);
-            }
-        });
+        await this.pubsub.subscribe(subscribedRoutingKeys.createOrder,       this.#handleCreateOrder.bind(this));
+        await this.pubsub.subscribe(subscribedRoutingKeys.updateOrderStatus,  this.#handleUpdateOrderStatus.bind(this));
 
         console.log('[CMSAdapter] Listening for commands on RabbitMQ.');
     }

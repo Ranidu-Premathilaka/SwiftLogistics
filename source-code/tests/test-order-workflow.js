@@ -20,14 +20,23 @@ const { request, test, assert, summary } = require('./helpers');
 const GATEWAY_HOST = process.env.GATEWAY_HOST || 'localhost';
 const GATEWAY_PORT = process.env.GATEWAY_PORT || 8081;
 
+// ── ANSI colours (local copy — helpers doesn't export them) ───────────────────
+const c = {
+    reset: '\x1b[0m', bold: '\x1b[1m',
+    green: '\x1b[32m', cyan: '\x1b[36m', yellow: '\x1b[33m',
+    magenta: '\x1b[35m', gray: '\x1b[90m', blue: '\x1b[34m', red: '\x1b[31m',
+};
+
 // Unique user per run to avoid state collisions
 const USERNAME = `order_test_${Date.now()}`;
 const PASSWORD  = 'TestPass123!';
 
 let accessToken    = null;
 let selectedItems  = [];   // items chosen from GET /items
-let orderId        = null;
+let paymentRequestId = null; // x-request-id for the initial POST /order (for tracing/logging)
+let orderId        = null; // generated in test, sent in PATCH /order, appears in notifications
 let clientSecret   = null; // returned by payment_intent_created notification
+let paymentToken    = null; // sent to PATCH /order to confirm the order
 
 // ── Notification Collector ─────────────────────────────────────────────────
 // Opens a WebSocket to /notify and collects incoming messages.
@@ -52,15 +61,21 @@ class NotificationCollector {
             this.ws.on('message', (raw) => {
                 try {
                     const msg = JSON.parse(raw.toString());
-                    console.log(`       ← WS ${JSON.stringify(msg)}`);
+                    const event   = msg.payload?.event ?? '(no event)';
+                    const persist = msg.persist === 0 ? `${c.gray}ephemeral${c.reset}` : `${c.cyan}persisted${c.reset}`;
+                    const details = Object.entries(msg.payload ?? {})
+                        .filter(([k]) => k !== 'event')
+                        .map(([k, v]) => `${c.gray}${k}${c.reset}=${c.yellow}${typeof v === 'object' ? JSON.stringify(v) : v}${c.reset}`)
+                        .join('  ');
+                    console.log(`     ${c.bold}${c.magenta}← WS${c.reset}  ${c.bold}${c.cyan}${event}${c.reset}  [${persist}]${details ? `  ${details}` : ''}`);
                     this._deliver(msg);
                 } catch (err) {
-                    console.error('       WS parse error:', err.message);
+                    console.error(`     ${c.red}WS parse error:${c.reset}`, err.message);
                 }
             });
 
             this.ws.on('close', () => {
-                console.log('       WS connection closed');
+                console.log(`     ${c.gray}── WebSocket closed ──${c.reset}`);
             });
         });
     }
@@ -124,7 +139,8 @@ async function delay(ms){
 // ── Test Suite ─────────────────────────────────────────────────────────────
 
 (async () => {
-    console.log('\n── Order Workflow Tests ──────────────────────────────────');
+    console.log(`\n${c.bold}${c.blue}── Order Workflow Tests ─────────────────────────────────${c.reset}`);
+    console.log(`   ${c.gray}user:${c.reset} ${USERNAME}  ${c.gray}gateway:${c.reset} ${GATEWAY_HOST}:${GATEWAY_PORT}\n`);
 
     // ── 1. Auth setup ─────────────────────────────────────────────────────
 
@@ -185,29 +201,23 @@ async function delay(ms){
             .map(i => ({ itemId: i.itemId, quantity: 2, price: i.price }));
 
         assert(selectedItems.length > 0, 'Need at least one item with stock ≥ 2 to proceed');
-        console.log(`       selected: ${JSON.stringify(selectedItems)}`);
+        console.log(`     ${c.gray}selected:${c.reset}`);
+        selectedItems.forEach(i => console.log(`       ${c.cyan}${i.itemId}${c.reset}  qty=${c.yellow}${i.quantity}${c.reset}  price=${c.green}$${i.price}${c.reset}`));
     });
 
-    await delay(1000000); 
     // ── 4. Create order ───────────────────────────────────────────────────
 
     await test('POST /order → 200 initiates order creation', async () => {
-        orderId = `order-${Date.now()}`;
-        const requestId = `create-${Date.now()}`;
+        paymentRequestId = `create-${Date.now()}`;
 
         const { status, body } = await request(
             'POST', '/order/',
             {
-                orderData: {
-                    orderId,
-                    amount:   selectedItems.reduce((sum, i) => sum + i.price * i.quantity, 0),
-                    currency: 'USD',
-                    itemList: selectedItems,
-                },
+                itemList: selectedItems,
             },
             {
                 Authorization:  `Bearer ${accessToken}`,
-                'x-request-id': requestId,
+                'x-request-id': paymentRequestId,
             },
         );
         assert(status === 200, `Expected 200, got ${status}: ${JSON.stringify(body)}`);
@@ -226,22 +236,30 @@ async function delay(ms){
         const msg = await notifications.waitFor('payment_intent_created', 20000);
 
         assert(msg.persist === 0,                          `Expected persist 0 (non-persistent), got '${msg.persist}'`);
-        assert(msg.payload.orderId   === orderId,          `orderId mismatch: got ${msg.payload.orderId}`);
         assert(typeof msg.payload.clientSecret === 'string', 'clientSecret missing or not a string');
+        assert(msg.payload.idempotencyKey === paymentRequestId, `idempotencyKey mismatch: expected '${paymentRequestId}', got '${msg.payload.idempotencyKey}'`);
 
         clientSecret = msg.payload.clientSecret;
-        console.log(`       clientSecret: ${clientSecret}`);
+        orderId = msg.payload.orderId;
+        console.log(`     ${c.gray}orderId:${c.reset}      ${c.cyan}${orderId}${c.reset}`);
+        console.log(`     ${c.gray}clientSecret:${c.reset} ${c.yellow}${clientSecret}${c.reset}`);
     });
 
-    // ── 6. Confirm order (user_confirmed + paymentToken) ──────────────────
+    // Dummy payment handling
+    paymentToken = clientSecret + '-token'; 
+
+
+    // ── 6. Confirm order (order_confirmed + paymentToken) ──────────────────
 
     await test('PATCH /order → 200 initiates order confirmation', async () => {
         const { status, body } = await request(
             'PATCH', '/order/',
             {
                 orderId,
-                status:       'user_confirmed',
-                paymentToken: clientSecret,
+                status:       'order_confirmed',
+                data: {
+                paymentToken: paymentToken,
+                }
             },
             {
                 Authorization:  `Bearer ${accessToken}`,
@@ -281,23 +299,17 @@ async function delay(ms){
         }
     });
 
+
     // ── 8. Reservation-failure path: order with unknown item ──────────────
     // POST a new order with a non-existent itemId → WMS rejects → reservation_failed
 
     await test('WS: reservation_failed when itemId does not exist', async () => {
-        const badOrderId   = `order-bad-${Date.now()}`;
         const badRequestId = `create-bad-${Date.now()}`;
+        const badItemList  = [{ itemId: 'item-does-not-exist', quantity: 1 }];
 
         const { status } = await request(
             'POST', '/order/',
-            {
-                orderData: {
-                    orderId:  badOrderId,
-                    amount:   9.99,
-                    currency: 'USD',
-                    itemList: [{ itemId: 'item-does-not-exist', quantity: 1 }],
-                },
-            },
+            { itemList: badItemList },
             {
                 Authorization:  `Bearer ${accessToken}`,
                 'x-request-id': badRequestId,
@@ -307,15 +319,19 @@ async function delay(ms){
 
         // Await: payment_intent_created fires first (PaymentService doesn't check stock)
         const intentMsg = await notifications.waitFor('payment_intent_created', 20000);
-        assert(intentMsg.payload.orderId === badOrderId);
+        const badOrderId = intentMsg.payload.orderId;
+        assert(typeof badOrderId === 'string', 'orderId missing from payment_intent_created');
 
         // Confirm the bad order
         await request(
             'PATCH', '/order/',
             {
-                orderId:      badOrderId,
-                status:       'user_confirmed',
-                paymentToken: intentMsg.payload.clientSecret,
+                orderId: badOrderId,
+                status:  'order_confirmed',
+                data: {
+                    paymentToken: intentMsg.payload.clientSecret,
+                    itemList:     badItemList,
+                },
             },
             {
                 Authorization:  `Bearer ${accessToken}`,

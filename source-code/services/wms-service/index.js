@@ -16,11 +16,11 @@ const { port } = require('./config');
 // ── Mock inventory ────────────────────────────────────────────────────────
 // stock = currently available units (already accounts for active reservations)
 const inventory = new Map([
-    ['item-001', { name: 'Laptop',      stock: 50  }],
-    ['item-002', { name: 'Phone',       stock: 100 }],
-    ['item-003', { name: 'Tablet',      stock: 30  }],
-    ['item-004', { name: 'Headphones',  stock: 200 }],
-    ['item-005', { name: 'Monitor',     stock: 20  }],
+    ['item-001', { name: 'Laptop',      stock: 50,  price: 999.99  }],
+    ['item-002', { name: 'Phone',       stock: 100, price: 699.99  }],
+    ['item-003', { name: 'Tablet',      stock: 30,  price: 449.99  }],
+    ['item-004', { name: 'Headphones',  stock: 200, price: 149.99  }],
+    ['item-005', { name: 'Monitor',     stock: 20,  price: 349.99  }],
 ]);
 
 // orderId → Map<itemId, quantity>  (so release can restore exact amounts)
@@ -47,6 +47,7 @@ const server = http.createServer(async (req, res) => {
       itemId,
       name:  item.name,
       stock: item.stock,
+      price: item.price,
     }));
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ items }));

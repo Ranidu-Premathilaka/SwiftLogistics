@@ -1,180 +1,66 @@
 /**
- * 
- * Self host at some port
- * 
- * Accepts: SOAP Based XML requests
- * 
- * Process with DB
- * 
+ * Legacy CMS SOAP Service
+ *
+ * Hosted internally on the container (127.0.0.1 only).
+ * All external interaction goes through the CMS Adapter via RabbitMQ.
+ *
+ * Operations:
+ *   CreateOrder       — { orderData, transactionInfo }
+ *   UpdateOrderStatus — { orderId, status }
  */
-const http = require("http");
-const soap = require("soap");
-const { port } = require("./config");
+const http   = require('http');
+const soap   = require('soap');
+const crypto = require('crypto');
+const fs     = require('fs');
+const path   = require('path');
+const { port } = require('./config');
+const db     = require('../utility/db');
+
+db.init();
+
+const wsdlXml = fs.readFileSync(path.join(__dirname, 'cms.wsdl'), 'utf8');
 
 // 1️⃣ Define your service (fake implementation)
 const cmsService = {
   CMSService: {
     CMSPort: {
-      GetClientOrders({ clientId }) {
-        console.log("GetClientOrders called:", clientId);
+      async CreateOrder({ clientId, orderData }) {
+        const orderId = `ORD-${crypto.randomUUID()}`;
+        console.log('[CMS] CreateOrder called, generated orderId:', orderId);
+        await db.query(
+            `INSERT INTO orders (order_id, client_id, item_list, status)
+             VALUES ($1, $2, $3, 'pending')`,
+            [orderId, clientId, JSON.stringify(orderData?.itemList ?? [])]
+        );
+        console.log(`[CMS] Order stored in DB: orderId=${orderId}, status='pending'`);
         return {
-          GetClientOrdersResponse: {
-            orders: [
-              { orderId: "order1", amount: 100 },
-              { orderId: "order2", amount: 250 },
-            ],
-          },
+          CreateOrderResponse: { success: true, orderId },
         };
       },
 
-      GetOrderInfo({ orderId }) {
-        console.log("GetOrderInfo called:", orderId);
+      async UpdateOrderStatus({ orderId, status }) {
+        console.log('[CMS] UpdateOrderStatus called:', orderId, status);
+        const { rows } = await db.query(
+            `UPDATE orders
+             SET    status = $1, updated_at = NOW()
+             WHERE  order_id = $2
+             RETURNING order_id, client_id, item_list, status`,
+            [status, orderId]
+        );
+        const row = rows[0];
+        console.log(`[CMS] Order status updated in DB: orderId=${orderId}, status=${status}`);
+        const orderData = row
+            ? { orderId: row.order_id, clientId: row.client_id, itemList: row.item_list, status: row.status }
+            : { orderId, status };
         return {
-          GetOrderInfoResponse: {
-            order: { orderId, items: [{ productId: "p1", qty: 2 }] },
-          },
-        };
-      },
-
-      CreateOrder({ orderData, transactionInfo }) {
-        console.log("CreateOrder called:", orderData, transactionInfo);
-        return {
-          CreateOrderResponse: { success: true },
-        };
-      },
-
-      UpdateOrder({ orderId, updateData }) {
-        console.log("UpdateOrder called:", orderId, updateData);
-        return {
-          UpdateOrderResponse: {
-            updatedOrder: { orderId, ...updateData },
-          },
-        };
-      },
-
-      DeleteOrder({ orderId }) {
-        console.log("DeleteOrder called:", orderId);
-        return {
-          DeleteOrderResponse: { success: true },
+          UpdateOrderStatusResponse: { success: true, orderData },
         };
       },
     },
   },
 };
 
-// 2️⃣ WSDL definition (mock; includes all adapter operations)
-// NOTE: This WSDL intentionally keeps payloads loosely-typed (xsd:anyType) for simplicity.
-const wsdlXml = `
-<definitions name="CMSService"
-  targetNamespace="http://example.com/cms"
-  xmlns:tns="http://example.com/cms"
-  xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
-  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
-  xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/">
-
-  <message name="GetClientOrdersRequest">
-    <part name="clientId" type="xsd:string"/>
-  </message>
-  <message name="GetClientOrdersResponse">
-    <part name="orders" type="xsd:anyType"/>
-  </message>
-
-  <message name="GetOrderInfoRequest">
-    <part name="orderId" type="xsd:string"/>
-  </message>
-  <message name="GetOrderInfoResponse">
-    <part name="order" type="xsd:anyType"/>
-  </message>
-
-  <message name="CreateOrderRequest">
-    <part name="orderData" type="xsd:anyType"/>
-    <part name="transactionInfo" type="xsd:anyType"/>
-  </message>
-  <message name="CreateOrderResponse">
-    <part name="success" type="xsd:boolean"/>
-  </message>
-
-  <message name="UpdateOrderRequest">
-    <part name="orderId" type="xsd:string"/>
-    <part name="updateData" type="xsd:anyType"/>
-  </message>
-  <message name="UpdateOrderResponse">
-    <part name="updatedOrder" type="xsd:anyType"/>
-  </message>
-
-  <message name="DeleteOrderRequest">
-    <part name="orderId" type="xsd:string"/>
-  </message>
-  <message name="DeleteOrderResponse">
-    <part name="success" type="xsd:boolean"/>
-  </message>
-
-  <portType name="CMSPortType">
-    <operation name="GetClientOrders">
-      <input message="tns:GetClientOrdersRequest"/>
-      <output message="tns:GetClientOrdersResponse"/>
-    </operation>
-    <operation name="GetOrderInfo">
-      <input message="tns:GetOrderInfoRequest"/>
-      <output message="tns:GetOrderInfoResponse"/>
-    </operation>
-    <operation name="CreateOrder">
-      <input message="tns:CreateOrderRequest"/>
-      <output message="tns:CreateOrderResponse"/>
-    </operation>
-    <operation name="UpdateOrder">
-      <input message="tns:UpdateOrderRequest"/>
-      <output message="tns:UpdateOrderResponse"/>
-    </operation>
-    <operation name="DeleteOrder">
-      <input message="tns:DeleteOrderRequest"/>
-      <output message="tns:DeleteOrderResponse"/>
-    </operation>
-  </portType>
-
-  <binding name="CMSBinding" type="tns:CMSPortType">
-    <soap:binding style="rpc" transport="http://schemas.xmlsoap.org/soap/http"/>
-
-    <operation name="GetClientOrders">
-      <soap:operation soapAction="GetClientOrders"/>
-      <input><soap:body use="literal"/></input>
-      <output><soap:body use="literal"/></output>
-    </operation>
-
-    <operation name="GetOrderInfo">
-      <soap:operation soapAction="GetOrderInfo"/>
-      <input><soap:body use="literal"/></input>
-      <output><soap:body use="literal"/></output>
-    </operation>
-
-    <operation name="CreateOrder">
-      <soap:operation soapAction="CreateOrder"/>
-      <input><soap:body use="literal"/></input>
-      <output><soap:body use="literal"/></output>
-    </operation>
-
-    <operation name="UpdateOrder">
-      <soap:operation soapAction="UpdateOrder"/>
-      <input><soap:body use="literal"/></input>
-      <output><soap:body use="literal"/></output>
-    </operation>
-
-    <operation name="DeleteOrder">
-      <soap:operation soapAction="DeleteOrder"/>
-      <input><soap:body use="literal"/></input>
-      <output><soap:body use="literal"/></output>
-    </operation>
-  </binding>
-
-  <service name="CMSService">
-    <port name="CMSPort" binding="tns:CMSBinding">
-      <soap:address location="/wsdl"/>
-    </port>
-  </service>
-</definitions>
-`;
-
-// 3️⃣ Start HTTP server and attach SOAP service
+// 2️⃣ Start HTTP server and attach SOAP service
 const server = http.createServer((req, res) => {
   res.statusCode = 404; // fallback
   res.end("Not found");

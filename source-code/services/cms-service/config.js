@@ -1,3 +1,5 @@
+// CMS Adapter Service Configuration
+
 module.exports = {
   // Port the legacy CMS SOAP server listens on (internal only, not exposed)
   port: 3000,
@@ -13,14 +15,21 @@ module.exports = {
   },
 
   // Routing keys this adapter subscribes to
-  routingKeys: {
-    getClientOrders:    'cms.client.orders.get',
-    getOrderInfo:       'cms.order.info.get',
-    createOrder:        'cms.order.create',
-    updateOrder:        'cms.order.update',
-    deleteOrder:        'cms.order.delete',
+  subscribedRoutingKeys: {
+    // { correlationId, clientId, orderData }
+    createOrder:       'cms.order.create',
+    // { correlationId, orderId, status }
+    updateOrderStatus: 'cms.order.update_status',
   },
 
-  // Routing key prefix used when publishing replies
-  replyRoutingKey: 'cms.reply',
+  // Routing keys this adapter publishes on
+  publishedRoutingKeys: {
+    // { correlationId, orderData }
+    orderCreated: 'order.created',
+    // { correlationId, orderId, status }
+    orderStatusUpdated: 'order.status_updated',
+    // { correlationId, orderId } — emitted after UpdateOrderStatus succeeds
+    orderConfirmed: 'order.confirmed',
+  },
+
 };
