@@ -1,103 +1,160 @@
 \section{Alternative Architectures}
 \label{sec:alternatives}
 
-% Discussion of two alternative architectures that could solve the problem
+Before arriving at the proposed event-driven microservices architecture, two well-established architectural approaches were evaluated as candidates for the SwiftTrack integration platform. This section describes each alternative, analyses its strengths and weaknesses in the context of SwiftLogistics' requirements, and explains why it was ultimately not selected.
 
-\subsection{Alternative 1: Monolithic ESB-Centric Architecture}
+% ─────────────────────────────────────────────────────────────
+\subsection{Alternative 1: Service-Oriented Architecture (SOA) with an Enterprise Service Bus}
 \label{subsec:alt1}
-% Description of a traditional ESB-based approach
-% All integration logic centralized in ESB
 
 \subsubsection{Overview}
-% High-level description
-% Main components and structure
+
+Service-Oriented Architecture (SOA) is a well-established integration paradigm in which discrete business capabilities are exposed as interoperable services, and an \textit{Enterprise Service Bus} (ESB) acts as the central communication backbone that mediates all interactions between them. In the context of SwiftLogistics, the CMS, ROS, and WMS would each be wrapped behind a standardised service interface (typically WSDL/SOAP or a canonical REST contract), and all inter-service communication would flow through the ESB. The ESB would be responsible for protocol mediation, message transformation, routing, service orchestration, and centralised error handling.
+
+Under this model, the SwiftTrack platform would be structured as follows:
+
+\begin{itemize}
+    \item \textbf{Client-facing layer:} The web portal and driver mobile app communicate exclusively with the ESB through a unified service endpoint.
+    \item \textbf{ESB:} A product such as WSO2 Enterprise Integrator, Apache ServiceMix, or MuleSoft Anypoint Platform acts as the single integration hub. It translates the SOAP envelope from the CMS, calls the RESTful ROS, and translates the proprietary TCP frames from the WMS into a canonical message format that all consumers can understand.
+    \item \textbf{Back-end service layer:} CMS, ROS, and WMS expose their native interfaces; the ESB carries the full burden of adaptation.
+    \item \textbf{Data layer:} Shared relational databases or a canonical data model managed by the ESB.
+\end{itemize}
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth]{figures/alternative1_architecture.pdf}
-    \caption{Alternative Architecture 1: ESB-Centric Approach}
+    \caption{Alternative Architecture 1: SOA with Enterprise Service Bus}
     \label{fig:alt1}
 \end{figure}
 
 \subsubsection{Advantages}
-% Benefits of this approach:
-%   - Centralized orchestration
-%   - Simplified monitoring
-%   - Strong transaction management
+
+\begin{itemize}
+    \item \textbf{Centralised orchestration and governance:} All integration logic—protocol translation, data mapping, routing rules—resides in a single, well-defined layer. This makes it straightforward to audit, enforce policies, and apply changes uniformly across the platform.
+    \item \textbf{Simplified monitoring and management:} Because every message flows through the ESB, a single dashboard can provide full visibility into the health and throughput of all integrations without instrumenting individual services.
+    \item \textbf{Mature tooling and standards:} ESB products provide out-of-the-box connectors for SOAP, REST, JMS, TCP, and more, reducing the amount of custom adapter code that must be written and maintained.
+    \item \textbf{Strong transaction management:} ESBs typically offer built-in support for distributed transaction coordination (WS-AtomicTransaction, WS-BPEL-based sagas), making it easier to maintain consistency across the CMS, ROS, and WMS without implementing bespoke compensation logic.
+    \item \textbf{Established enterprise adoption:} SOA with an ESB is a proven architecture with a large body of reference implementations and organisational expertise, reducing the risk of architectural missteps.
+\end{itemize}
 
 \subsubsection{Disadvantages}
-% Drawbacks:
-%   - Single point of failure
-%   - Scalability limitations
-%   - Tight coupling
-%   - ESB becomes bottleneck
+
+\begin{itemize}
+    \item \textbf{Single point of failure and bottleneck:} The ESB is in the critical path of every request. Any degradation in ESB performance—whether due to high message throughput, a misconfigured transformation pipeline, or a software fault—immediately impacts the entire platform. During peak periods such as Avurudu sales, the ESB would need to handle an extremely high volume of order creation events, making it a natural bottleneck.
+    \item \textbf{Limited horizontal scalability:} Traditional ESB products are designed as vertically scaled appliances. While clustering is possible, it is expensive and complex. Scaling a single integration component to match the throughput of thousands of concurrent orders is significantly harder than independently scaling individual microservices.
+    \item \textbf{Tight coupling through the bus:} Although services themselves are loosely coupled at the interface level, all services remain tightly coupled to the ESB's availability and versioning cycle. Changes to a canonical data model or a routing rule require coordinated redeployment of ESB configurations, often involving lengthy release windows.
+    \item \textbf{Heavyweight infrastructure and licensing cost:} Enterprise ESB products frequently carry substantial licensing fees and operational overhead. Even open-source ESBs require significant expertise to configure, tune, and maintain, increasing both capital and operational expenditure.
+    \item \textbf{Reduced team autonomy:} In a SOA/ESB model, service teams must submit integration changes through a centralised platform team that owns the bus configuration, creating organisational bottlenecks that slow development velocity.
+\end{itemize}
 
 \subsubsection{Why Not Chosen}
-% Specific reasons this was not selected for SwiftLogistics
-% Doesn't meet scalability requirements
-% Risk of ESB bottleneck during high-volume events
 
-\subsection{Alternative 2: Point-to-Point Integration Architecture}
+While the SOA/ESB model offers strong governance and mature tooling, it conflicts directly with two of SwiftLogistics' most critical non-functional requirements. First, the central ESB would become a performance bottleneck during high-volume commercial events, where hundreds of concurrent order submissions must be processed without degrading the client portal's responsiveness. Second, the architecture provides insufficient support for the independent scalability demanded by a growing logistics business—adding new clients, drivers, or partner systems should not require re-engineering the integration hub. The proposed event-driven microservices architecture achieves the same integration goals while distributing load across independently deployable, horizontally scalable services connected through a durable message broker.
+
+% ─────────────────────────────────────────────────────────────
+\subsection{Alternative 2: Three-Tier Layered Architecture}
 \label{subsec:alt2}
-% Description of direct integration between systems
-% No central middleware layer
 
 \subsubsection{Overview}
-% High-level description
-% Direct connections between systems
+
+The three-tier (or N-tier) layered architecture is one of the most widely adopted structural patterns in enterprise software. It organises a system into three horizontal layers with strict unidirectional dependencies: a \textit{presentation tier} that handles user interaction, a \textit{business logic tier} (application server) that processes requests and enforces domain rules, and a \textit{data tier} that manages persistent storage.
+
+Applied to SwiftLogistics, this architecture would be realised as follows:
+
+\begin{itemize}
+    \item \textbf{Presentation tier:} The SwiftTrack web portal and the driver mobile application communicate directly with the application server over HTTPS.
+    \item \textbf{Business logic tier:} A monolithic or modular application server (for example, a Node.js Express monolith or a Java Spring Boot application) contains all business logic—order processing, route planning coordination, warehouse status management—as well as adapter code that calls the CMS via SOAP, the ROS via REST, and the WMS via TCP/IP. All integration with the three back-end systems is handled synchronously within this tier, either using direct library calls or a shared internal service layer.
+    \item \textbf{Data tier:} Centralised relational databases (e.g., PostgreSQL) store all application state: orders, user credentials, delivery status, and audit logs. The CMS, ROS, and WMS are accessed as external data sources from the business logic tier.
+\end{itemize}
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth]{figures/alternative2_architecture.pdf}
-    \caption{Alternative Architecture 2: Point-to-Point Integration}
+    \caption{Alternative Architecture 2: Three-Tier Layered Architecture}
     \label{fig:alt2}
 \end{figure}
 
 \subsubsection{Advantages}
-% Benefits:
-%   - Simple initial implementation
-%   - Low latency
-%   - No central infrastructure needed
+
+\begin{itemize}
+    \item \textbf{Simplicity and rapid initial implementation:} The three-tier model is well understood, and a functioning prototype can be built quickly with minimal infrastructure. Developers familiar with any web framework can contribute productively from the outset.
+    \item \textbf{Low operational overhead:} There is no message broker, no service registry, and no distributed tracing infrastructure to configure and maintain. The entire application can be deployed as a single unit to a single server or container.
+    \item \textbf{Low latency for synchronous flows:} Because all integration calls are in-process or direct network calls within the business logic tier, there is no messaging overhead between components. For low-volume, simple request-response flows, this can yield lower end-to-end latency than an event-driven approach.
+    \item \textbf{Straightforward debugging:} A monolithic or tightly coupled layered application has a single call stack, making it much easier to trace bugs and reason about execution flow compared to distributed, asynchronous microservice systems.
+    \item \textbf{Familiar deployment model:} Deploying a three-tier application to a server, a virtual machine, or a container is a well-understood operation with extensive tooling support.
+\end{itemize}
 
 \subsubsection{Disadvantages}
-% Drawbacks:
-%   - Integration complexity grows exponentially
-%   - Difficult to maintain
-%   - No centralized monitoring
-%   - Tight coupling between systems
-%   - No standardized error handling
+
+\begin{itemize}
+    \item \textbf{Synchronous blocking on slow back-end systems:} The most critical drawback for SwiftLogistics is that the business logic tier must wait for each back-end call to complete before responding. If the ROS is slow to compute a route, or the WMS is temporarily unavailable, the entire order submission request stalls, directly degrading the client portal experience. This is fundamentally incompatible with the requirement for high-volume, non-blocking order processing.
+    \item \textbf{Inability to guarantee message delivery:} Without a durable message broker, if the application server crashes mid-transaction—after calling the CMS but before notifying the WMS—there is no replay mechanism. Orders can be silently lost, violating the requirement that no order is ever lost even if a back-end system is temporarily unavailable.
+    \item \textbf{Scalability ceiling:} Scaling a monolithic application tier requires replicating the entire application, including components that are not under load. Fine-grained scaling—for example, deploying additional order-processing capacity during a promotional event while leaving the authentication layer unchanged—is not feasible in this model.
+    \item \textbf{Integration complexity concentrated in one place:} All SOAP, REST, and TCP/IP adapter code lives within the same application, creating a large, tightly coupled codebase. Changes to the WMS proprietary protocol, for instance, risk introducing regressions in the CMS or ROS integration paths.
+    \item \textbf{No real-time push capability by default:} Implementing real-time delivery status updates to the client portal (e.g., WebSocket push when a driver marks a package as delivered) requires bolt-on solutions such as long-polling or ad-hoc WebSocket servers that are awkward to integrate cleanly in a synchronous layered architecture.
+    \item \textbf{Tight coupling between tiers:} Modifying the data schema or the business logic layer frequently requires coordinated changes across the entire application, increasing release risk and slowing development velocity as the team grows.
+\end{itemize}
 
 \subsubsection{Why Not Chosen}
-% Poor maintainability
-% Doesn't scale with business growth
-% Lacks flexibility for adding new systems
 
+The three-tier architecture was rejected primarily because synchronous, blocking integration is irreconcilable with SwiftLogistics' peak-load requirements and its zero-order-loss guarantee. During promotional sales periods, the system must process a large volume of incoming orders concurrently. A synchronous application server would queue all requests serially, with each request blocked on—potentially slow—calls to the ROS for route optimisation and the WMS via TCP/IP, producing unacceptable response times and a high risk of request timeouts. Furthermore, without a durable message broker, the architecture provides no recovery mechanism for partial transaction failures, making it impossible to guarantee that every submitted order is ultimately processed. The event-driven, microservices-based proposed architecture decouples reception from processing, enabling the platform to immediately acknowledge client requests and process them asynchronously without risking data loss.
+
+% ─────────────────────────────────────────────────────────────
 \subsection{Comparative Analysis}
 \label{subsec:comparison}
-% Table comparing all three architectures across key criteria
+
+Table~\ref{tab:arch_comparison} summarises the evaluation of all three architectural approaches across the key criteria derived from the SwiftLogistics functional and non-functional requirements.
 
 \begin{table}[H]
     \centering
     \caption{Comparison of Architecture Approaches}
     \label{tab:arch_comparison}
-    \begin{tabular}{|l|c|c|c|}
+    \renewcommand{\arraystretch}{1.35}
+    \begin{tabular}{|p{3.5cm}|p{3.5cm}|p{3.5cm}|p{3.5cm}|}
         \hline
-        \textbf{Criteria} & \textbf{Proposed} & \textbf{ESB-Centric} & \textbf{Point-to-Point} \\
+        \textbf{Criteria} & \textbf{Proposed: Event-Driven Microservices} & \textbf{Alternative 1: SOA / ESB} & \textbf{Alternative 2: Three-Tier Layered} \\
         \hline
-        Scalability & & & \\
+        \textbf{Scalability} &
+        High — each microservice scales independently; broker buffers load spikes &
+        Moderate — ESB is a vertical scaling bottleneck; clustering is costly &
+        Low — entire application tier must be replicated to scale any function \\
         \hline
-        Maintainability & & & \\
+        \textbf{Resilience} &
+        High — durable queues prevent message loss; service failures are isolated &
+        Moderate — ESB failure is catastrophic; back-end failures may cascade &
+        Low — no durable buffer; crash mid-transaction loses order data \\
         \hline
-        Flexibility & & & \\
+        \textbf{Maintainability} &
+        High — each service has a single responsibility and can be deployed independently &
+        Moderate — business logic is centralised but ESB configuration is complex &
+        Moderate — simple structure but integration code becomes tightly coupled \\
         \hline
-        Resilience & & & \\
+        \textbf{Flexibility} &
+        High — new services or back-end adapters subscribe to existing events without changing producers &
+        Moderate — adding a new integration requires modifying ESB routing and transformation pipelines &
+        Low — new integrations require changes throughout the monolithic application tier \\
         \hline
-        Performance & & & \\
+        \textbf{Real-time Notifications} &
+        High — event-driven model natively supports WebSocket push via the notification service &
+        Moderate — requires additional components (e.g., a WebSocket server outside the ESB) &
+        Low — requires a bolt-on polling or WebSocket solution that is architecturally awkward \\
         \hline
-        Complexity & & & \\
+        \textbf{Async Processing} &
+        High — RabbitMQ pub-sub decouples order receipt from all downstream processing &
+        Moderate — ESBs support async message queuing but add latency through the bus &
+        Low — inherently synchronous; async requires significant additional design effort \\
+        \hline
+        \textbf{Initial Complexity} &
+        High — distributed system requires more infrastructure and operational knowledge &
+        Moderate — ESB reduces custom code but requires specialist platform expertise &
+        Low — straightforward to build and reason about initially \\
+        \hline
+        \textbf{Operational Overhead} &
+        Moderate — Docker Compose manages services; RabbitMQ and PostgreSQL add components &
+        High — ESB platform requires dedicated administration, licensing, and tuning &
+        Low — single application server with one database \\
         \hline
     \end{tabular}
 \end{table}
 
-% Detailed discussion of comparison results
-% Why proposed architecture best meets requirements
+The comparative analysis confirms that the proposed event-driven microservices architecture best satisfies the combination of scalability, resilience, and real-time responsiveness required by SwiftLogistics. While it carries higher initial implementation complexity compared to the three-tier alternative, this cost is justified by the operational benefits at scale. The SOA/ESB alternative provides stronger governance tooling but introduces a critical single point of failure and a scalability ceiling that would expose the business to unacceptable risk during peak order volumes. The three-tier architecture, though the simplest to build, fundamentally cannot fulfil the core requirements of asynchronous high-volume processing and guaranteed order delivery, making it unsuitable as a foundation for the SwiftTrack platform.

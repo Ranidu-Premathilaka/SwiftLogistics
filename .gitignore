@@ -1,2 +1,6 @@
 # documentation compiled files
+.gitignore
 documentation/compiled/*
+documentation/
+!documentation/main.tex
+node_modules/
