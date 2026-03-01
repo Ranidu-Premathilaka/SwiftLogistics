@@ -21,6 +21,8 @@ module.exports = {
     itemsRequest:          'wms.items.request',
     // { correlationId, orderId, deliveryStatus } — update delivery status on a reservation
     updateDeliveryStatus:  'wms.delivery.update_status',
+    // { correlationId, orderId } — query the deliveryStatus of a reservation
+    statusRequest:         'wms.delivery.status_request',
   },
 
   // Routing keys this adapter publishes on
@@ -33,5 +35,7 @@ module.exports = {
     wmsItemsResponse:       'wms.items.response',
     // { correlationId, orderId, deliveryStatus }
     deliveryStatusUpdated:  'wms.delivery.status_updated',
+    // { correlationId, orderId, deliveryStatus }
+    statusResponse:         'wms.delivery.status_response',
   },
 };

@@ -126,6 +126,24 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // ── Get delivery status for a reservation ───────────────────────────
+  if (req.method === 'GET' && req.url.startsWith('/api/wms/delivery-status')) {
+    const searchParams = new URL(req.url, 'http://localhost').searchParams;
+    const orderId      = searchParams.get('orderId');
+    if (!orderId) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'orderId query param is required' }));
+    }
+    const reservation = reservations.get(String(orderId));
+    if (!reservation) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: false, error: `No reservation found for orderId: ${orderId}` }));
+    }
+    console.log(`[WMS] deliveryStatus query: orderId=${orderId}, deliveryStatus=${reservation.deliveryStatus}`);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ success: true, orderId, deliveryStatus: reservation.deliveryStatus }));
+  }
+
   // ── Update delivery status for a reservation ──────────────────────────
   if (req.method === 'PATCH' && req.url === '/api/wms/delivery-status') {
     try {

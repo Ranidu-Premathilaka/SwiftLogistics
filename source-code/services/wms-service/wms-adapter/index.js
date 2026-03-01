@@ -53,6 +53,11 @@ class WMSAdapter {
         return res.data;
     }
 
+    async #getDeliveryStatus(orderId) {
+        const res = await axios.get(`${this.baseUrl}/delivery-status`, { params: { orderId } });
+        return res.data;
+    }
+
     // ── Handlers ──────────────────────────────────────────────────────────────
 
     async #handleItemsRequest({ correlationId }) {
@@ -141,6 +146,28 @@ class WMSAdapter {
         }
     }
 
+    async #handleStatusRequest({ correlationId, orderId }) {
+        console.log(`[WMSAdapter] handleStatusRequest: orderId=${orderId}`);
+        try {
+            const result = await this.#getDeliveryStatus(orderId);
+            await this.pubsub.publish(config.publishedRoutingKeys.statusResponse, {
+                correlationId,
+                orderId,
+                deliveryStatus: result.deliveryStatus ?? null,
+            });
+            console.log(`[WMSAdapter] Published wms.delivery.status_response for orderId=${orderId}, deliveryStatus=${result.deliveryStatus}`);
+        } catch (err) {
+            const status = err.response?.status;
+            console.warn(`[WMSAdapter] statusRequest error for orderId=${orderId} (HTTP ${status ?? 'N/A'}): ${err.message}`);
+            await this.pubsub.publish(config.publishedRoutingKeys.statusResponse, {
+                correlationId,
+                orderId,
+                deliveryStatus: null,
+                error: status === 404 ? 'No reservation found for this order' : err.message,
+            });
+        }
+    }
+
     // ── Start the adapter ─────────────────────────────────────────────────────
 
     async start() {
@@ -162,6 +189,10 @@ class WMSAdapter {
         await this.pubsub.subscribe(
             config.subscribedRoutingKeys.updateDeliveryStatus,
             this.#handleUpdateDeliveryStatus.bind(this),
+        );
+        await this.pubsub.subscribe(
+            config.subscribedRoutingKeys.statusRequest,
+            this.#handleStatusRequest.bind(this),
         );
         console.log('[WMSAdapter] Listening for commands on RabbitMQ.');
     }

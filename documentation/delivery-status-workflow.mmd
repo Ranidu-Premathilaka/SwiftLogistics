@@ -1,0 +1,34 @@
+%%{init: {'theme': 'dark'}}%%
+sequenceDiagram
+    actor User as Client / Driver
+    participant GW as API Gateway
+    participant DS as delivery-service
+    participant WMS as wms-adapter
+    participant WMSDB as WMS Legacy (HTTP)
+    participant NS as notify-service
+
+    rect rgb(50, 20, 90)
+        note over User, NS: Query Delivery Status Workflow
+        User->>GW: GET /delivery?orderId=ORD-xxx (Authorization: Bearer JWT)
+        note right of GW: Validates JWT, injects x-username
+        GW->>DS: GET /?orderId=ORD-xxx (x-username injected)
+        note right of DS: correlationId = x-request-id (or generated)<br/>pendingStatusRequests[correlationId] = { userId }
+        DS-->>GW: 200 "Delivery status request initiated"
+        GW-->>User: 200 "Delivery status request initiated"
+
+        DS-->>WMS: wms.delivery.status_request { correlationId, orderId }
+        WMS->>WMSDB: GET /api/wms/delivery-status?orderId=ORD-xxx
+
+        alt Reservation exists
+            WMSDB-->>WMS: { success: true, orderId, deliveryStatus }
+            note right of WMSDB: deliveryStatus is one of:<br/>null (reserved, not yet paid),<br/>ready_for_pickup (payment succeeded),<br/>on_route (driver collected)
+            WMS-->>DS: wms.delivery.status_response { correlationId, orderId, deliveryStatus }
+        else No reservation found (orderId unknown or not yet confirmed)
+            WMSDB-->>WMS: 404 { success: false, error }
+            WMS-->>DS: wms.delivery.status_response { correlationId, orderId, deliveryStatus: null, error }
+        end
+
+        note right of DS: pendingStatusRequests[correlationId].userId → userId<br/>delete pendingStatusRequests[correlationId]
+        DS-->>NS: notify.delivery.status { persist:0, userId, payload: { event, orderId, deliveryStatus, error? } }
+        NS-->>User: WS delivery_status { orderId, deliveryStatus, error? }
+    end

@@ -19,6 +19,9 @@ const pendingRoutes = new Map();
 // Populated once the optimized path arrives; cleared once driver is notified.
 const pendingNotifications = new Map();
 
+// No map needed for status requests — userId is encoded directly in the correlationId
+// as "userId-{username}-{timestamp}" and recovered in the response handler.
+
 
 // ── HTTP route handlers ────────────────────────────────────────────────────
 
@@ -50,6 +53,31 @@ async function requestDelivery({ count, 'x-role': role, 'x-username': driverUser
     });
 
     return 'Delivery request initiated — you will receive your route via notification';
+}
+
+/**
+ * GET /
+ * Query:   ?orderId=ORD-xxx
+ * Headers: x-username (injected by API Gateway), x-request-id
+ *
+ * Any authenticated user can query the delivery (WMS) status of an order.
+ * Publishes wms.delivery.status_request; the result is delivered via WebSocket.
+ */
+async function getDeliveryStatus({ orderId, 'x-username': userId, 'x-request-id': requestId }) {
+    if (!orderId) {
+        InternalRouter.sendRoutingError('orderId query param is required', 400);
+    }
+    if (!userId) {
+        InternalRouter.sendRoutingError('Missing x-username header', 401);
+    }
+
+    const correlationId = `userId-${userId}-${Date.now()}`;
+    console.log(`[DeliveryService] getDeliveryStatus: orderId=${orderId}, userId=${userId}, correlationId=${correlationId}`);
+
+    await pubsub.publish(config.publishedRoutingKeys.wmsStatusRequest, { correlationId, orderId });
+    console.log(`[DeliveryService] Published wms.delivery.status_request for orderId=${orderId}`);
+
+    return 'Delivery status request initiated — you will receive the status via notification';
 }
 
 
@@ -163,16 +191,52 @@ async function handleOrderCollected({ correlationId }) {
     console.log(`[DeliveryService] Published notify.driver.route for driver=${driverUsername}`);
 }
 
+/**
+ * wms.delivery.status_response
+ * Payload: { correlationId, orderId, deliveryStatus, error? }
+ *
+ * WMS adapter responded with the delivery status for an order.
+ * Forward to the requesting user via WebSocket notification.
+ */
+async function handleWmsStatusResponse({ correlationId, orderId, deliveryStatus, error }) {
+    if (!correlationId) {
+        console.error('[DeliveryService] handleWmsStatusResponse: missing correlationId');
+        return;
+    }
+
+    if (!correlationId.startsWith('userId-')) {
+        console.error(`[DeliveryService] handleWmsStatusResponse: unrecognised correlationId=${correlationId}`);
+        return;
+    }
+
+    // correlationId format: "userId-{username}-{timestamp}"
+    // Strip prefix and trailing timestamp to recover the username.
+    const withoutPrefix = correlationId.slice('userId-'.length);       // "{username}-{timestamp}"
+    const lastDash      = withoutPrefix.lastIndexOf('-');
+    const userId        = withoutPrefix.slice(0, lastDash);             // "{username}"
+
+    console.log(`[DeliveryService] WMS status response: orderId=${orderId}, deliveryStatus=${deliveryStatus}, userId=${userId}`);
+
+    await pubsub.publish(config.publishedRoutingKeys.notifyDeliveryStatus, {
+        persist: 0,
+        userId,
+        payload: { event: 'delivery_status', orderId, deliveryStatus, ...(error ? { error } : {}) },
+    });
+    console.log(`[DeliveryService] Published notify.delivery.status for userId=${userId}`);
+}
+
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────
 
 (async () => {
     internalRouter.registerRoute('POST', '/', requestDelivery);
+    internalRouter.registerRoute('GET',  '/', getDeliveryStatus);
 
     await pubsub.connect();
     pubsub.subscribe(config.subscribedRoutingKeys.deliveryOrderResponse, handleDeliveryOrderResponse);
     pubsub.subscribe(config.subscribedRoutingKeys.routePathResponse,     handleRoutePathResponse);
     pubsub.subscribe(config.subscribedRoutingKeys.orderCollected,        handleOrderCollected);
+    pubsub.subscribe(config.subscribedRoutingKeys.wmsStatusResponse,     handleWmsStatusResponse);
 
     internalRouter.host(config.port);
     console.log(`[DeliveryService] Listening on port ${config.port}`);

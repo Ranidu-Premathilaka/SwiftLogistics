@@ -19,6 +19,10 @@ module.exports = {
         markCollected:        'delivery.order.mark_collected',
         // { persist, userId, payload } → notify-service
         notifyDriverRoute:    'notify.driver.route',
+        // { correlationId, orderId } → wms-adapter
+        wmsStatusRequest:     'wms.delivery.status_request',
+        // { persist, userId, payload } → notify-service
+        notifyDeliveryStatus: 'notify.delivery.status',
     },
 
     subscribedRoutingKeys: {
@@ -28,5 +32,7 @@ module.exports = {
         routePathResponse:      'delivery.route.path_response',
         // { correlationId } — from order-service (all status updates done)
         orderCollected:         'delivery.order.collected',
+        // { correlationId, orderId, deliveryStatus } — from wms-adapter
+        wmsStatusResponse:      'wms.delivery.status_response',
     },
 };
