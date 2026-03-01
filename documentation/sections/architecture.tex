@@ -6,6 +6,8 @@
 % API Gateway 
 % REST 
 % Async
+% Event-driven
+% Service mesh
 
 \subsection{Conceptual Architecture}
 \label{subsec:conceptual}
@@ -42,35 +44,34 @@
 \end{figure}
 
 % Description of:
-%   - Frontend frameworks
-%   - API Gateway technology
-%   - Message broker implementation
-%   - Service adapter implementations
-%   - Database systems
-%   - Container orchestration
+%   - API Gateway technology: JavaScript / HTTP-Proxy
+%   - Message broker implementation: RabbitMQ
+%   - Service adapter implementations: SOAP client for CMS, REST client for ROS, TCP/IP socket for WMS
+%   - Database systems: PostgreSQL
+%   - Container orchestration: Docker Swarm
 
 \subsection{Component Descriptions}
 \label{subsec:components}
 % Detailed description of each architectural component
 
 \subsubsection{Client Portal}
-% Web-based interface for e-commerce clients
+% Web-based interface for e-commerce clients: user interface not implemented in prototype
 % Technologies: React/Angular/Vue
 % Key features and responsibilities
 
 \subsubsection{Driver Mobile Application}
-% Mobile app for delivery drivers
-% Technologies: React Native/Flutter
+% Mobile app for delivery drivers: user interface not implemented in prototype
+% Technologies: Any platform that can utilize a REST API
 % Key features and responsibilities
 
 \subsubsection{API Gateway}
 % Central entry point for all client requests
-% Technologies: Kong/Apache APISIX/Spring Cloud Gateway
-% Responsibilities: routing, authentication, rate limiting
+% Technologies: JavaScript / HTTP-Proxy
+% Responsibilities: routing, authentication
 
 \subsubsection{Message Broker}
 % Asynchronous communication hub
-% Technologies: RabbitMQ/Apache Kafka
+% Technologies: RabbitMQ
 % Publish-subscribe patterns
 % Queue management
 
@@ -94,7 +95,7 @@
 \label{subsec:deployment}
 % How components are deployed
 % Containerization strategy
-% Orchestration with Kubernetes/Docker Swarm
+% Orchestration with Docker Swarm
 
 \begin{figure}[H]
     \centering
@@ -105,7 +106,7 @@
 
 \subsection{Rationale for Final Architecture}
 \label{subsec:rationale}
-% Justification for the chosen architecture
-% Why this approach best addresses the requirements
-% Trade-offs and benefits
-% Comparison with alternatives (reference to Section~\ref{sec:alternatives})
+% Justification for the chosen architecture: flexibility, scalability, maintainability
+% Why this approach best addresses the requirements: loose coupling, using adapters to translate protocols and data formats, asynchronous communication
+% Trade-offs and benefits: complexity vs. modularity, development effort vs. long-term maintainability
+% Comparison with alternatives (reference to Section~\ref{sec:alternative_architectures})
