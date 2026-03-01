@@ -9,7 +9,7 @@ module.exports = {
     },
 
     // Statuses that remove an order from the route-filling index
-    removalStatuses: ['on_route', 'delivered', 'cancelled', 'failed', 'payment_failed'],
+    removalStatuses: ['collected', 'delivered', 'cancelled', 'failed', 'payment_failed'],
 
     publishedRoutingKeys: {
         // { correlationId, locations } → ros adapter

@@ -48,6 +48,11 @@ class WMSAdapter {
         return res.data;
     }
 
+    async #updateDeliveryStatus(orderId, deliveryStatus) {
+        const res = await axios.patch(`${this.baseUrl}/delivery-status`, { orderId, deliveryStatus });
+        return res.data;
+    }
+
     // ── Handlers ──────────────────────────────────────────────────────────────
 
     async #handleItemsRequest({ correlationId }) {
@@ -117,6 +122,25 @@ class WMSAdapter {
         }
     }
 
+    async #handleUpdateDeliveryStatus({ correlationId, orderId, deliveryStatus }) {
+        console.log(`[WMSAdapter] handleUpdateDeliveryStatus: orderId=${orderId}, deliveryStatus=${deliveryStatus}`);
+        try {
+            const result = await this.#updateDeliveryStatus(orderId, deliveryStatus);
+            if (!result.success) {
+                console.warn(`[WMSAdapter] deliveryStatus update failed for orderId=${orderId}: ${result.error}`);
+                return;
+            }
+            await this.pubsub.publish(config.publishedRoutingKeys.deliveryStatusUpdated, {
+                correlationId,
+                orderId,
+                deliveryStatus,
+            });
+            console.log(`[WMSAdapter] Published wms.delivery.status_updated for orderId=${orderId}, deliveryStatus=${deliveryStatus}`);
+        } catch (err) {
+            console.error(`[WMSAdapter] updateDeliveryStatus error for orderId=${orderId}:`, err.message);
+        }
+    }
+
     // ── Start the adapter ─────────────────────────────────────────────────────
 
     async start() {
@@ -134,6 +158,10 @@ class WMSAdapter {
         await this.pubsub.subscribe(
             config.subscribedRoutingKeys.itemsRequest,
             this.#handleItemsRequest.bind(this),
+        );
+        await this.pubsub.subscribe(
+            config.subscribedRoutingKeys.updateDeliveryStatus,
+            this.#handleUpdateDeliveryStatus.bind(this),
         );
         console.log('[WMSAdapter] Listening for commands on RabbitMQ.');
     }

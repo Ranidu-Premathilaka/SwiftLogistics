@@ -69,6 +69,12 @@ sequenceDiagram
                 note right of OS: Remove pendingPayments[correlationId]
                 OS-->>NS: notify.order.payment_completed { persist:0, userId, payload }
                 NS-->>Client: WS payment_completed { orderId, transactionId }
+                OS-->>CMS: cms.order.update_status { correlationId, orderId, status: pending_delivery }
+                CMS->>CMSDB: UpdateOrderStatus (SOAP) { orderId, status: pending_delivery }
+                note right of CMSDB: Order is now visible to GetNextPendingDelivery
+                OS-->>WMS: wms.delivery.update_status { correlationId, orderId, deliveryStatus: ready_for_pickup }
+                WMS->>WMSDB: PATCH /api/wms/delivery-status { orderId, deliveryStatus: ready_for_pickup }
+                note right of WMSDB: reservation.deliveryStatus = ready_for_pickup
 
             else Charge declined (~10%)
                 PS-->>OS: order.payment.failed { correlationId, orderId, error }

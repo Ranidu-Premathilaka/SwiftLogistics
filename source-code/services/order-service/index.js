@@ -194,6 +194,14 @@ async function handlePaymentCompleted({ correlationId, orderId, transactionId })
         status: 'pending_delivery',
     });
     console.log(`[OrderService] Transitioning orderId=${orderId} to pending_delivery`);
+
+    // Mark items as ready_for_pickup in WMS now that payment has been received
+    await pubsub.publish(config.publishedRoutingKeys.updateWmsDeliveryStatus, {
+        correlationId: `ready-pickup-${orderId}`,
+        orderId,
+        deliveryStatus: 'ready_for_pickup',
+    });
+    console.log(`[OrderService] Updating WMS deliveryStatus to ready_for_pickup for orderId=${orderId}`);
 }
 
 /** order.payment.failed — PaymentService charge was declined */
@@ -269,16 +277,22 @@ async function handleMarkCollected({ correlationId, orderIds }) {
         console.error('[OrderService] handleMarkCollected: missing fields');
         return;
     }
-    console.log(`[OrderService] Marking ${orderIds.length} order(s) as on_route`);
+    console.log(`[OrderService] Marking ${orderIds.length} order(s) as on_route (WMS) / collected (CMS)`);
 
-    // Publish a CMS status update for every order in parallel
-    await Promise.all(orderIds.map(orderId =>
+    await Promise.all(orderIds.flatMap(orderId => [
+        // Delivery-specific status goes to WMS
+        pubsub.publish(config.publishedRoutingKeys.updateWmsDeliveryStatus, {
+            correlationId: `on-route-${correlationId}-${orderId}`,
+            orderId,
+            deliveryStatus: 'on_route',
+        }),
+        // CMS gets a neutral order-level status to clear it from the pending-delivery queue
         pubsub.publish(config.publishedRoutingKeys.updateOrderStatus, {
             correlationId: `collected-${correlationId}-${orderId}`,
             orderId,
-            status: 'on_route',
-        })
-    ));
+            status: 'collected',
+        }),
+    ]));
 
     // Confirm back to delivery-service so it can notify the driver
     await pubsub.publish(config.publishedRoutingKeys.orderCollected, { correlationId });

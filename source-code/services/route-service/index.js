@@ -58,7 +58,7 @@ function findClosestStops(anchorOrder, maxStops) {
  * Payload: { correlationId, orderData: { orderId, status, destination, ... } }
  *
  * - pending_delivery  → add orderId→destination to the index (order is paid, awaiting pickup)
- * - on_route / delivered / cancelled / failed → remove from index
+ * - collected / delivered / cancelled / failed → remove from index
  */
 async function handleOrderStatusUpdated({ orderData }) {
     const { orderId, status, destination } = orderData ?? {};

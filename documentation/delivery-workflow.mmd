@@ -6,6 +6,8 @@ sequenceDiagram
     participant OS as order-service
     participant CMS as cms-adapter
     participant CMSDB as CMS Legacy (SOAP)
+    participant WMS as wms-adapter
+    participant WMSDB as WMS Legacy (HTTP)
     participant RS as route-service
     participant ros as ros-adapter
     participant rosDB as ros Legacy (HTTP)
@@ -19,7 +21,7 @@ sequenceDiagram
         CMS-->>RS: order.status_updated { correlationId, orderData }
         alt status = pending_delivery
             note right of RS: orderLocationIndex.set(orderId, destination)
-        else status in removal set (on_route / delivered / cancelled / failed)
+        else status in removal set (collected / delivered / cancelled / failed)
             note right of RS: orderLocationIndex.delete(orderId)
         end
     end
@@ -77,11 +79,14 @@ sequenceDiagram
         DS-->>OS: delivery.order.mark_collected { correlationId, orderIds }
 
         loop For each orderId (parallel)
-            OS-->>CMS: cms.order.update_status { correlationId, orderId, status: on_route }
-            CMS->>CMSDB: UpdateOrderStatus (SOAP) { orderId, status: on_route }
+            OS-->>WMS: wms.delivery.update_status { correlationId, orderId, deliveryStatus: on_route }
+            note right of WMS: PATCH /api/wms/delivery-status → reservation.deliveryStatus = on_route
+            WMS-->>OS: wms.delivery.status_updated { correlationId, orderId, deliveryStatus }
+            OS-->>CMS: cms.order.update_status { correlationId, orderId, status: collected }
+            CMS->>CMSDB: UpdateOrderStatus (SOAP) { orderId, status: collected }
             CMSDB-->>CMS: { success, orderData }
             CMS-->>OS: order.status_updated { correlationId, orderData }
-            note right of RS: RS receives order.status_updated → removes orderId from index
+            note right of RS: RS receives order.status_updated (collected) → removes orderId from index
         end
 
         OS-->>DS: delivery.order.collected { correlationId }

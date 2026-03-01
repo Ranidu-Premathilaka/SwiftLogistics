@@ -83,7 +83,7 @@ const server = http.createServer(async (req, res) => {
         inventory.get(itemId).stock -= quantity;
         reserved.set(itemId, quantity);
       }
-      reservations.set(String(orderId), reserved);
+      reservations.set(String(orderId), { items: reserved, deliveryStatus: null });
 
       const reservationId = `RES-${orderId}-${Date.now()}`;
       console.log(`[WMS] Reserved: orderId=${orderId}, reservationId=${reservationId}`);
@@ -106,9 +106,9 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ error: 'orderId is required' }));
       }
 
-      const reserved = reservations.get(String(orderId));
-      if (reserved) {
-        for (const [itemId, quantity] of reserved) {
+      const reservation = reservations.get(String(orderId));
+      if (reservation) {
+        for (const [itemId, quantity] of reservation.items) {
           const item = inventory.get(itemId);
           if (item) item.stock += quantity;
         }
@@ -118,6 +118,30 @@ const server = http.createServer(async (req, res) => {
         console.warn(`[WMS] No reservation found for orderId=${orderId} (may have already been released)`);
       }
 
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: true }));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+    }
+  }
+
+  // ── Update delivery status for a reservation ──────────────────────────
+  if (req.method === 'PATCH' && req.url === '/api/wms/delivery-status') {
+    try {
+      const body = JSON.parse(await readBody(req));
+      const { orderId, deliveryStatus } = body;
+      if (!orderId || !deliveryStatus) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: 'orderId and deliveryStatus are required' }));
+      }
+      const reservation = reservations.get(String(orderId));
+      if (!reservation) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ success: false, error: `No reservation found for orderId: ${orderId}` }));
+      }
+      reservation.deliveryStatus = deliveryStatus;
+      console.log(`[WMS] deliveryStatus updated: orderId=${orderId}, deliveryStatus=${deliveryStatus}`);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ success: true }));
     } catch (err) {

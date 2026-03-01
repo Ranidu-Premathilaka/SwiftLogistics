@@ -24,6 +24,8 @@ module.exports = {
         orderConfirmed:     'order.confirmed',
         // { correlationId, orderId } → tell WMS to release the reservation on payment failure
         releaseReservation: 'wms.order.release',
+        // { correlationId, orderId, deliveryStatus } → consumed by WMS adapter
+        updateWmsDeliveryStatus: 'wms.delivery.update_status',
         // { correlationId, userId } → request all orders for a user from CMS
         getOrders:          'cms.orders.requested',
         // { persist, userId, payload } → consumed by notify-service

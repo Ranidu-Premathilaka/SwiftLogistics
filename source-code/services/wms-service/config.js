@@ -14,20 +14,24 @@ module.exports = {
   // Routing keys this adapter subscribes to
   subscribedRoutingKeys: {
     // { correlationId, orderId, itemList } — triggered after CMS confirms the order
-    orderConfirmed:     'order.confirmed',
+    orderConfirmed:        'order.confirmed',
     // { correlationId, orderId } — triggered when payment fails; release the reservation
-    releaseReservation: 'wms.order.release',
+    releaseReservation:    'wms.order.release',
     // { correlationId } — request for the current inventory list
-    itemsRequest:       'wms.items.request',
+    itemsRequest:          'wms.items.request',
+    // { correlationId, orderId, deliveryStatus } — update delivery status on a reservation
+    updateDeliveryStatus:  'wms.delivery.update_status',
   },
 
   // Routing keys this adapter publishes on
   publishedRoutingKeys: {
     // { correlationId, orderId, reservationId }
-    wmsReserved:          'order.wms.reserved',
+    wmsReserved:            'order.wms.reserved',
     // { correlationId, orderId, error }
-    wmsReservationFailed: 'order.wms.reservation_failed',
+    wmsReservationFailed:   'order.wms.reservation_failed',
     // { correlationId, items: [{ itemId, name, stock }] }
-    wmsItemsResponse:     'wms.items.response',
+    wmsItemsResponse:       'wms.items.response',
+    // { correlationId, orderId, deliveryStatus }
+    deliveryStatusUpdated:  'wms.delivery.status_updated',
   },
 };
