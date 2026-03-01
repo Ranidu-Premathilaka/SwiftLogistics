@@ -1,0 +1,25 @@
+%%{init: {'theme': 'dark'}}%%
+sequenceDiagram
+    actor Client
+    participant GW as API Gateway
+    participant OS as order-service
+    participant NS as notify-service
+    participant CMS as cms-adapter
+    participant CMSDB as CMS Legacy (SOAP)
+
+    rect rgb(50, 20, 90)
+        note over Client, CMSDB: View Orders Workflow
+        Client->>GW: GET /order
+        GW->>OS: GET / (x-username injected)
+        note right of OS: correlationId = "userId-{clientId}"
+        OS-->>GW: 200 "Order query initiated"
+        GW-->>Client: 200 "Order query initiated"
+        OS-->>CMS: cms.orders.requested { correlationId, userId }
+        CMS->>CMSDB: GetOrdersByUser (SOAP) { clientId: userId }
+        note right of CMSDB: SELECT * FROM orders WHERE client_id = clientId
+        CMSDB-->>CMS: { success, orders: [...] }
+        CMS-->>OS: order.cms.order_response { correlationId, userId, orders }
+        note right of OS: clientId = correlationId.slice("userId-".length)
+        OS-->>NS: notify.client.order_query_response { persist:0, userId, payload }
+        NS-->>Client: WS order_query_response { orders: [{ orderId, clientId, itemList, status, createdAt, updatedAt }] }
+    end

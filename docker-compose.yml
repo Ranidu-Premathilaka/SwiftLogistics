@@ -1,0 +1,222 @@
+services:
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: rabbitmq-service
+    networks:
+      - internal
+    expose:
+      - 5672
+    ports:
+      - "15672:15672"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+
+  # # API Gateway that clients interact with
+  api-gateway:
+    build:
+      context: ./source-code
+      dockerfile: ./services/api-gateway/Dockerfile
+    container_name: api-gateway-service
+    ports:
+      - "8081:8080"
+    networks:
+      - internal
+    environment:
+      - PORT=8080
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
+    restart: unless-stopped
+
+  #Internal services
+
+  # Legacy Systems 
+  cms:
+    build:
+      context: ./source-code
+      dockerfile: ./services/cms-service/Dockerfile
+    container_name: cms-service
+    networks:
+      - internal
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq-service:5672
+      - DB_HOST=postgres-service
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-logistic_db}
+      - DB_PORT=5432
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_started
+    restart: unless-stopped
+  ros:
+    build:
+      context: ./source-code
+      dockerfile: ./services/ros-service/Dockerfile
+    container_name: ros-service
+    networks:
+      - internal
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq-service:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+  wms:
+    build:
+      context: ./source-code
+      dockerfile: ./services/wms-service/Dockerfile
+    container_name: wms-service
+    networks:
+      - internal
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq-service:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres-service
+    networks:
+      - internal
+    environment:
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
+      - POSTGRES_DB=${DB_NAME:-logistic_db}
+    volumes:
+      - ./source-code/db:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+
+  # Core Services
+
+  auth:
+    build:
+      context: ./source-code
+      dockerfile: ./services/auth-service/Dockerfile
+    container_name: auth-service
+    networks:
+      - internal
+    environment:
+      - PORT=3000
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
+      - DB_HOST=postgres-service
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-logistic_db}
+      - DB_PORT=5432
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  notify:
+    build:
+      context: ./source-code
+      dockerfile: ./services/notify-service/Dockerfile
+    container_name: notify-service
+    networks:
+      - internal
+    environment:
+      - PORT=3000
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq-service:5672
+      - DB_HOST=postgres-service
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-logistic_db}
+      - DB_PORT=5432
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_started
+    restart: unless-stopped
+
+  order:
+    build:
+      context: ./source-code
+      dockerfile: ./services/order-service/Dockerfile
+    container_name: order-service
+    expose:
+      - "3000"
+    networks:
+      - internal
+    environment:
+      - PORT=3000
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq-service:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  items:
+    build:
+      context: ./source-code
+      dockerfile: ./services/items-service/Dockerfile
+    container_name: items-service
+    expose:
+      - "3000"
+    networks:
+      - internal
+    environment:
+      - PORT=3000
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq-service:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  payment:
+    build:
+      context: ./source-code
+      dockerfile: ./services/payment-service/Dockerfile
+    container_name: payment-service
+    networks:
+      - internal
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq-service:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  delivery:
+    build:
+      context: ./source-code
+      dockerfile: ./services/delivery-service/Dockerfile
+    container_name: delivery-service
+    expose:
+      - "3000"
+    networks:
+      - internal
+    environment:
+      - PORT=3000
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq-service:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  route:
+    build:
+      context: ./source-code
+      dockerfile: ./services/route-service/Dockerfile
+    container_name: route-service
+    networks:
+      - internal
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq-service:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+networks:
+  internal:
+    driver: bridge

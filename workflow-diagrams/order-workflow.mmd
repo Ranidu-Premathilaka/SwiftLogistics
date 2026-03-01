@@ -1,0 +1,96 @@
+%%{init: {'theme': 'dark'}}%%
+sequenceDiagram
+    actor Client
+    participant GW as API Gateway
+    participant IS as items-service
+    participant OS as order-service
+    participant NS as notify-service
+    participant CMS as cms-adapter
+    participant CMSDB as CMS Legacy (SOAP)
+    participant PS as payment-service
+    participant WMS as wms-adapter
+    participant WMSDB as WMS Legacy (HTTP)
+
+    rect rgb(15, 40, 80)
+        note over Client, WMSDB: 1 — Browse Inventory
+        Client->>GW: GET /items
+        GW->>IS: GET / (x-username)
+        IS-->>GW: 200 "Items request queued"
+        GW-->>Client: 200 "Items request queued"
+        IS-->>WMS: wms.items.request { correlationId }
+        WMS->>WMSDB: GET /api/wms/items
+        WMSDB-->>WMS: [{ itemId, name, stock, price }]
+        WMS-->>IS: wms.items.response { correlationId, items }
+        IS-->>NS: notify.client.items_response { persist:0, userId, payload }
+        NS-->>Client: WS items_response { items }
+    end
+
+    rect rgb(15, 60, 25)
+        note over Client, WMSDB: 2 — Create Order
+        Client->>GW: POST /order { itemList }
+        GW->>OS: POST / (x-username, x-request-id)
+        OS-->>GW: 200 "Order creation initiated"
+        GW-->>Client: 200 "Order creation initiated"
+        OS-->>CMS: cms.order.create { correlationId, clientId, orderData: { itemList } }
+        CMS->>CMSDB: CreateOrder (SOAP) { clientId, orderData }
+        note right of CMSDB: Generates orderId, stores order in DB
+        CMSDB-->>CMS: { success, orderId }
+        CMS-->>PS: order.created { correlationId, clientId, orderData: { itemList, orderId } }
+        PS->>PS: dummyCreatePaymentIntent()
+        PS-->>NS: notify.payment.intent_created { persist:0, userId, payload }
+        NS-->>Client: WS payment_intent_created { orderId, clientSecret, idempotencyKey }
+    end
+
+    rect rgb(70, 50, 10)
+        note over Client, WMSDB: 3 — Confirm Order  (paymentToken = clientSecret)
+        Client->>GW: PATCH /order { orderId, status:order_confirmed, data:{ paymentToken, itemList } }
+        GW->>OS: PATCH / (x-username, x-request-id)
+        note right of OS: Store pendingPayments[correlationId] = { paymentToken, clientId }
+        OS-->>GW: 200 "Order confirmation initiated"
+        GW-->>Client: 200 "Order confirmation initiated"
+        OS-->>CMS: cms.order.update_status { correlationId, orderId, status }
+        CMS->>CMSDB: UpdateOrderStatus (SOAP) { orderId, status }
+        note right of CMSDB: Updates status in DB, returns full order row
+        CMSDB-->>CMS: { success, orderData: { orderId, clientId, itemList, status } }
+        CMS-->>OS: order.status_updated { correlationId, orderId, status, orderData }
+        note right of OS: Extracts itemList from orderData
+        OS-->>WMS: order.confirmed { correlationId, orderId, itemList }
+        WMS->>WMSDB: POST /api/wms/reserve { orderId, itemList }
+
+        alt All items in stock
+            WMSDB-->>WMS: { success:true, reservationId }
+            note right of WMSDB: Stock decremented per item
+            WMS-->>OS: order.wms.reserved { correlationId, orderId, reservationId }
+            OS-->>PS: payment.charge { correlationId, orderId, paymentToken }
+            PS->>PS: dummyCharge(paymentToken, orderId)
+
+            alt Charge succeeds (~90%)
+                PS-->>OS: order.payment.completed { correlationId, orderId, transactionId }
+                note right of OS: Remove pendingPayments[correlationId]
+                OS-->>NS: notify.order.payment_completed { persist:0, userId, payload }
+                NS-->>Client: WS payment_completed { orderId, transactionId }
+                OS-->>CMS: cms.order.update_status { correlationId, orderId, status: pending_delivery }
+                CMS->>CMSDB: UpdateOrderStatus (SOAP) { orderId, status: pending_delivery }
+                note right of CMSDB: Order is now visible to GetNextPendingDelivery
+                OS-->>WMS: wms.delivery.update_status { correlationId, orderId, deliveryStatus: ready_for_pickup }
+                WMS->>WMSDB: PATCH /api/wms/delivery-status { orderId, deliveryStatus: ready_for_pickup }
+                note right of WMSDB: reservation.deliveryStatus = ready_for_pickup
+
+            else Charge declined (~10%)
+                PS-->>OS: order.payment.failed { correlationId, orderId, error }
+                note right of OS: Remove pendingPayments[correlationId]
+                OS-->>WMS: wms.order.release { correlationId, orderId }
+                WMS->>WMSDB: POST /api/wms/release { orderId }
+                note right of WMSDB: Stock restored
+                OS-->>NS: notify.order.payment_failed { persist:0, userId, payload }
+                NS-->>Client: WS payment_failed { orderId, reason }
+            end
+
+        else Item unknown or insufficient stock
+            WMSDB-->>WMS: { success:false, error }
+            WMS-->>OS: order.wms.reservation_failed { correlationId, orderId, error }
+            note right of OS: Remove pendingPayments[correlationId]
+            OS-->>NS: notify.order.reservation_failed { persist:0, userId, payload }
+            NS-->>Client: WS reservation_failed { orderId, reason }
+        end
+    end

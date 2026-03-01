@@ -1,0 +1,72 @@
+%%{init: {'theme': 'dark'}}%%
+sequenceDiagram
+    actor User
+    participant GW as API Gateway
+    participant AS as auth-service
+    participant DB as Auth DB (PostgreSQL)
+
+    rect rgb(15, 60, 25)
+        note over User, DB: 1 — Signup
+        User->>GW: POST /auth/signup { username, password, role }
+        note right of GW: /auth/ is a public prefix — no JWT check
+        GW->>AS: POST /signup { username, password, role }
+
+        alt role not in [client, driver]
+            AS-->>GW: 400 "Invalid role"
+            GW-->>User: 400 { error: "Invalid role — must be client or driver" }
+        else
+            AS->>DB: SELECT id FROM users WHERE username = $1
+            alt username already exists
+                DB-->>AS: row found
+                AS-->>GW: 409 "User already exists"
+                GW-->>User: 409 { error: "User already exists" }
+            else username is available
+                DB-->>AS: no rows
+                note right of AS: bcrypt.hash(password, 10)
+                AS->>DB: INSERT INTO users (username, password_hash, role)
+                DB-->>AS: ok
+                AS-->>GW: 200 { message: "User created successfully" }
+                GW-->>User: 200 { message: "User created successfully" }
+            end
+        end
+    end
+
+    rect rgb(70, 50, 10)
+        note over User, DB: 2 — Login
+        User->>GW: POST /auth/login { username, password }
+        note right of GW: /auth/ is a public prefix — no JWT check
+        GW->>AS: POST /login { username, password }
+
+        AS->>DB: SELECT password_hash, role FROM users WHERE username = $1
+        alt user not found
+            DB-->>AS: no rows
+            AS-->>GW: 401 "Invalid credentials"
+            GW-->>User: 401 { error: "Invalid credentials" }
+        else user found
+            DB-->>AS: { password_hash, role }
+            note right of AS: bcrypt.compare(password, password_hash)
+            alt password mismatch
+                AS-->>GW: 401 "Invalid credentials"
+                GW-->>User: 401 { error: "Invalid credentials" }
+            else password valid
+                note right of AS: jwt.sign({ username, role }, secret, { expiresIn: ACCESS_TOKEN_EXPIRY })<br/>jwt.sign({ username, role }, secret, { expiresIn: REFRESH_TOKEN_EXPIRY })
+                AS->>DB: INSERT INTO refresh_tokens (token, username)
+                DB-->>AS: ok
+                AS-->>GW: 200 { accessToken, refreshToken }
+                GW-->>User: 200 { accessToken, refreshToken }
+                note right of GW: All subsequent requests include<br/>Authorization: Bearer &lt;accessToken&gt;<br/>Gateway validates JWT + injects x-username, x-role
+            end
+        end
+    end
+
+    rect rgb(15, 40, 80)
+        note over User, DB: 3 — Using the Access Token (authenticated requests)
+        User->>GW: ANY /service/... { Authorization: Bearer accessToken }
+        note right of GW: jwt.verify(token, JWT_SECRET)
+        alt token invalid or expired
+            GW-->>User: 401 { error: "Invalid or expired token" }
+        else token valid
+            note right of GW: Injects x-username, x-role headers
+            GW->>GW: proxy to target service
+        end
+    end

@@ -1,0 +1,30 @@
+// Route Service Configuration
+
+module.exports = {
+
+    rabbitmq: {
+        url:      process.env.RABBITMQ_URL || 'amqp://localhost',
+        exchange: 'swift_logistics',
+        queue:    'route-service-queue',
+    },
+
+    // Statuses that remove an order from the route-filling index
+    removalStatuses: ['collected', 'delivered', 'cancelled', 'failed', 'payment_failed'],
+
+    publishedRoutingKeys: {
+        // { correlationId, locations } → ros adapter
+        rosOptimize:          'ros.route.optimize',
+        // { correlationId, optimizedPath } → delivery-service
+        deliveryPathResponse: 'delivery.route.path_response',
+    },
+
+    subscribedRoutingKeys: {
+        // { correlationId, orderData: { orderId, status, destination, ... } } — from CMS adapter
+        // Used to add (pending_delivery) or remove (on_route / cancelled / failed) index entries
+        orderStatusUpdated:  'order.status_updated',
+        // { correlationId, anchorOrder, count, driverUsername } — from delivery-service
+        pathRequested:       'route.delivery.path_requested',
+        // { correlationId, success, data: { optimizedPath } } — from ros adapter
+        rosReply:            'ros.reply',
+    },
+};

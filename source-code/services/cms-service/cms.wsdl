@@ -1,0 +1,94 @@
+<definitions name="CMSService"
+  targetNamespace="http://example.com/cms"
+  xmlns:tns="http://example.com/cms"
+  xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+  xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/">
+
+  <message name="CreateOrderRequest">
+    <part name="clientId"  type="xsd:string"/>
+    <part name="orderData" type="xsd:anyType"/>
+  </message>
+  <message name="CreateOrderResponse">
+    <part name="success"  type="xsd:boolean"/>
+    <part name="orderId"  type="xsd:string"/>
+  </message>
+
+  <message name="UpdateOrderStatusRequest">
+    <part name="orderId" type="xsd:string"/>
+    <part name="status"  type="xsd:string"/>
+  </message>
+  <message name="UpdateOrderStatusResponse">
+    <part name="success"   type="xsd:boolean"/>
+    <part name="orderData" type="xsd:anyType"/>
+  </message>
+
+  <message name="GetOrdersByUserRequest">
+    <part name="clientId" type="xsd:string"/>
+  </message>
+  <message name="GetOrdersByUserResponse">
+    <part name="success" type="xsd:boolean"/>
+    <part name="orders"  type="xsd:anyType"/>
+  </message>
+
+  <message name="GetNextPendingDeliveryRequest">
+    <part name="dummy" type="xsd:string"/>
+  </message>
+  <message name="GetNextPendingDeliveryResponse">
+    <part name="success" type="xsd:boolean"/>
+    <part name="orders"  type="xsd:anyType"/>
+  </message>
+
+  <portType name="CMSPortType">
+    <operation name="CreateOrder">
+      <input  message="tns:CreateOrderRequest"/>
+      <output message="tns:CreateOrderResponse"/>
+    </operation>
+    <operation name="UpdateOrderStatus">
+      <input  message="tns:UpdateOrderStatusRequest"/>
+      <output message="tns:UpdateOrderStatusResponse"/>
+    </operation>
+    <operation name="GetOrdersByUser">
+      <input  message="tns:GetOrdersByUserRequest"/>
+      <output message="tns:GetOrdersByUserResponse"/>
+    </operation>
+    <operation name="GetNextPendingDelivery">
+      <input  message="tns:GetNextPendingDeliveryRequest"/>
+      <output message="tns:GetNextPendingDeliveryResponse"/>
+    </operation>
+  </portType>
+
+  <binding name="CMSBinding" type="tns:CMSPortType">
+    <soap:binding style="rpc" transport="http://schemas.xmlsoap.org/soap/http"/>
+
+    <operation name="CreateOrder">
+      <soap:operation soapAction="CreateOrder"/>
+      <input><soap:body use="literal"/></input>
+      <output><soap:body use="literal"/></output>
+    </operation>
+
+    <operation name="UpdateOrderStatus">
+      <soap:operation soapAction="UpdateOrderStatus"/>
+      <input><soap:body use="literal"/></input>
+      <output><soap:body use="literal"/></output>
+    </operation>
+
+    <operation name="GetOrdersByUser">
+      <soap:operation soapAction="GetOrdersByUser"/>
+      <input><soap:body use="literal"/></input>
+      <output><soap:body use="literal"/></output>
+    </operation>
+
+    <operation name="GetNextPendingDelivery">
+      <soap:operation soapAction="GetNextPendingDelivery"/>
+      <input><soap:body use="literal"/></input>
+      <output><soap:body use="literal"/></output>
+    </operation>
+  </binding>
+
+  <service name="CMSService">
+    <port name="CMSPort" binding="tns:CMSBinding">
+      <soap:address location="/wsdl"/>
+    </port>
+  </service>
+</definitions>
