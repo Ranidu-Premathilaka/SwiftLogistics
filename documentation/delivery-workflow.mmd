@@ -7,8 +7,8 @@ sequenceDiagram
     participant CMS as cms-adapter
     participant CMSDB as CMS Legacy (SOAP)
     participant RS as route-service
-    participant RMS as rms-adapter
-    participant RMSDB as RMS Legacy (HTTP)
+    participant ros as ros-adapter
+    participant rosDB as ros Legacy (HTTP)
     participant NS as notify-service
 
     rect rgb(15, 40, 80)
@@ -51,7 +51,7 @@ sequenceDiagram
     end
 
     rect rgb(50, 15, 60)
-        note over DS, RMSDB: 3 — Build & Optimise Delivery Route
+        note over DS, rosDB: 3 — Build & Optimise Delivery Route
         note right of DS: Fetch { driverUsername, count } from pendingRequests, delete entry
         note right of DS: Store pendingRoutes[correlationId] = { driverUsername }
         DS-->>RS: route.delivery.path_requested { correlationId, anchorOrder: { orderId, location }, count }
@@ -59,11 +59,11 @@ sequenceDiagram
         note right of RS: findClosestStops(anchorOrder, maxStops)<br/>Reads orderLocationIndex, skips anchor,<br/>returns first (count-1) entries as { id, location }[]<br/>(dummy — real impl uses haversine distance)
         note right of RS: stops = [{ id: anchor.orderId, location }, ...closestStops]
 
-        RS-->>RMS: rms.route.optimize { correlationId, locations: stops }
-        RMS->>RMSDB: POST /api/ros/optimize-route { locations }
-        note right of RMSDB: Fisher-Yates shuffle — dummy path solver
-        RMSDB-->>RMS: { optimizedPath: [{ id, location }, ...] }
-        RMS-->>RS: rms.reply { correlationId, success, data: { optimizedPath } }
+        RS-->>ros: ros.route.optimize { correlationId, locations: stops }
+        ros->>rosDB: POST /api/ros/optimize-route { locations }
+        note right of rosDB: Fisher-Yates shuffle — dummy path solver
+        rosDB-->>ros: { optimizedPath: [{ id, location }, ...] }
+        ros-->>RS: ros.reply { correlationId, success, data: { optimizedPath } }
 
         note right of RS: Map id → orderId on each stop
         RS-->>DS: delivery.route.path_response { correlationId, optimizedPath: [{ orderId, location }] }

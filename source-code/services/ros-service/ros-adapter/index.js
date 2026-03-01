@@ -9,10 +9,10 @@
  *      the original correlationId so callers can match responses.
  *
  * Routing keys subscribed:
- *   rms.route.optimize — { origin, waypoints }
+ *   ros.route.optimize — { origin, waypoints }
  *
  * Reply routing key (publisher):
- *   rms.reply  — { correlationId, success, data?, error? }
+ *   ros.reply  — { correlationId, success, data?, error? }
  */
 
 const axios   = require('axios');
@@ -55,7 +55,7 @@ class ROSAdapter {
 
         const { routingKeys } = config;
 
-        // rms.route.optimize — { correlationId, locations: { id, location }[] }
+        // ros.route.optimize — { correlationId, locations: { id, location }[] }
         await this.pubsub.subscribe(routingKeys.optimizeRoute, async ({ correlationId, locations }) => {
             console.log(`[ROSAdapter] optimizeRoute: ${locations?.length} location(s)`);
             try {

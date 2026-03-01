@@ -8,9 +8,9 @@
  *        a. Take the single anchor order's location as the first stop.
  *        b. Fill up to `count` total stops by pulling other stored locations
  *           from the index (orders near the anchor that are also pending delivery).
- *        c. Call the RMS legacy system via rms.delivery.optimize with exactly
+ *        c. Call the ros legacy system via ros.delivery.optimize with exactly
  *           those `count` locations.
- *   3. Relay the RMS reply as delivery.route.path_response back to the delivery-service.
+ *   3. Relay the ros reply as delivery.route.path_response back to the delivery-service.
  */
 const PubSub = require('../utility/pubsub');
 const config = require('./config');
@@ -82,7 +82,7 @@ async function handleOrderStatusUpdated({ orderData }) {
  * route.delivery.path_requested
  * Payload: { correlationId, orders: [{ orderId, location, storageCount }], driverUsername }
  *
- * Build the full location list and ask the RMS to optimise the path.
+ * Build the full location list and ask the ros to optimise the path.
  *
  * Strategy:
 /**
@@ -91,7 +91,7 @@ async function handleOrderStatusUpdated({ orderData }) {
  *
  * The delivery-service provides a single anchor order (the oldest pending_delivery).
  * We fill up to `count` total stops by picking other orders from our index whose
- * destinations are not already included, then send the full list to RMS.
+ * destinations are not already included, then send the full list to ros.
  */
 async function handlePathRequested({ correlationId, anchorOrder, count }) {
     if (!correlationId || !anchorOrder) {
@@ -117,29 +117,29 @@ async function handlePathRequested({ correlationId, anchorOrder, count }) {
         ...findClosestStops(anchorOrder, maxStops),
     ];
 
-    console.log(`[RouteService] Sending ${stops.length} stop(s) to RMS for optimization`);
+    console.log(`[RouteService] Sending ${stops.length} stop(s) to ros for optimization`);
 
-    await pubsub.publish(config.publishedRoutingKeys.rmsOptimize, {
+    await pubsub.publish(config.publishedRoutingKeys.rosOptimize, {
         correlationId,
         locations: stops,
     });
 }
 
 /**
- * rms.reply
+ * ros.reply
  * Payload: { correlationId, success, data: { optimizedPath } }
  *
- * RMS adapter has returned the optimized path; forward to delivery-service.
+ * ros adapter has returned the optimized path; forward to delivery-service.
  */
-async function handleRmsReply({ correlationId, success, data, error }) {
+async function handlerosReply({ correlationId, success, data, error }) {
     if (!correlationId) {
-        console.error('[RouteService] handleRmsDeliveryReply: missing correlationId');
+        console.error('[RouteService] handlerosDeliveryReply: missing correlationId');
         return;
     }
 
 
     if (!success) {
-        console.error(`[RouteService] RMS path optimization failed: ${error}`);
+        console.error(`[RouteService] ros path optimization failed: ${error}`);
         await pubsub.publish(config.publishedRoutingKeys.deliveryPathResponse, {
             correlationId,
             optimizedPath: [],
@@ -148,7 +148,7 @@ async function handleRmsReply({ correlationId, success, data, error }) {
     }
 
     const optimizedPath = (data?.optimizedPath ?? []).map(({ id, location }) => ({ orderId: id, location }));
-    console.log(`[RouteService] RMS returned optimized path (${optimizedPath.length} stops), correlationId=${correlationId}`);
+    console.log(`[RouteService] ros returned optimized path (${optimizedPath.length} stops), correlationId=${correlationId}`);
 
     await pubsub.publish(config.publishedRoutingKeys.deliveryPathResponse, {
         correlationId,
@@ -164,7 +164,7 @@ async function handleRmsReply({ correlationId, success, data, error }) {
 
     pubsub.subscribe(config.subscribedRoutingKeys.orderStatusUpdated, handleOrderStatusUpdated);
     pubsub.subscribe(config.subscribedRoutingKeys.pathRequested,    handlePathRequested);
-    pubsub.subscribe(config.subscribedRoutingKeys.rmsReply, handleRmsReply);
+    pubsub.subscribe(config.subscribedRoutingKeys.rosReply, handlerosReply);
 
     console.log('[RouteService] Connected to RabbitMQ and listening for events.');
 })();

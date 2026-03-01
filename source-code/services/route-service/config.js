@@ -12,8 +12,8 @@ module.exports = {
     removalStatuses: ['on_route', 'delivered', 'cancelled', 'failed', 'payment_failed'],
 
     publishedRoutingKeys: {
-        // { correlationId, locations } → RMS adapter
-        rmsOptimize:          'rms.route.optimize',
+        // { correlationId, locations } → ros adapter
+        rosOptimize:          'ros.route.optimize',
         // { correlationId, optimizedPath } → delivery-service
         deliveryPathResponse: 'delivery.route.path_response',
     },
@@ -24,7 +24,7 @@ module.exports = {
         orderStatusUpdated:  'order.status_updated',
         // { correlationId, anchorOrder, count, driverUsername } — from delivery-service
         pathRequested:       'route.delivery.path_requested',
-        // { correlationId, success, data: { optimizedPath } } — from RMS adapter
-        rmsReply:            'rms.reply',
+        // { correlationId, success, data: { optimizedPath } } — from ros adapter
+        rosReply:            'ros.reply',
     },
 };

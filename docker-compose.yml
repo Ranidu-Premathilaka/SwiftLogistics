@@ -55,11 +55,11 @@ services:
       postgres:
         condition: service_started
     restart: unless-stopped
-  rms:
+  ros:
     build:
       context: ./source-code
-      dockerfile: ./services/rms-service/Dockerfile
-    container_name: rms-service
+      dockerfile: ./services/ros-service/Dockerfile
+    container_name: ros-service
     networks:
       - internal
     environment:
