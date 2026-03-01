@@ -81,6 +81,65 @@ async function getDeliveryStatus({ orderId, 'x-username': userId, 'x-request-id'
 }
 
 
+/**
+ * PATCH /
+ * Body:    { orderId, status: 'completed' | 'rejected', signatureUrl }
+ * Headers: x-role (injected by API Gateway), x-username, x-request-id
+ *
+ * Driver marks an order as completed or rejected, providing a proof-of-signature URL.
+ * Fires three operations in parallel:
+ *   1. wms.delivery.update_status  — stores deliveryStatus + signatureUrl in WMS
+ *   2. cms.order.update_status     — sets order-level status to 'delivered' or 'rejected'
+ *   3. notify.delivery.status      — immediately notifies the driver
+ */
+async function completeDelivery({ orderId, status, signatureUrl, 'x-role': role, 'x-username': driverUsername, 'x-request-id': idempotencyKey }) {
+    if (role !== 'driver') {
+        InternalRouter.sendRoutingError('Only drivers can complete deliveries', 403);
+    }
+    if (!orderId || !status) {
+        InternalRouter.sendRoutingError('orderId and status are required', 400);
+    }
+    if (status !== 'completed' && status !== 'rejected') {
+        InternalRouter.sendRoutingError('status must be "completed" or "rejected"', 400);
+    }
+    if (status === 'completed' && !signatureUrl) {
+        InternalRouter.sendRoutingError('signatureUrl is required for completed deliveries', 400);
+    }
+
+    const correlationId  = idempotencyKey || `complete-${orderId}-${Date.now()}`;
+    const orderStatus    = status === 'completed' ? 'delivered' : 'rejected';
+    const deliveryStatus = status === 'completed' ? 'delivered' : 'rejected';
+
+    console.log(`[DeliveryService] completeDelivery: orderId=${orderId}, status=${status}, driver=${driverUsername}`);
+
+    await Promise.all([
+        // 1. Update WMS reservation with final deliveryStatus + proof image
+        pubsub.publish(config.publishedRoutingKeys.updateWmsDeliveryStatus, {
+            correlationId,
+            orderId,
+            deliveryStatus,
+            signatureUrl,
+        }),
+        // 2. Update CMS order-level status
+        pubsub.publish(config.publishedRoutingKeys.updateOrderStatus, {
+            correlationId,
+            orderId,
+            status: orderStatus,
+        }),
+        // 3. Immediately notify the driver
+        pubsub.publish(config.publishedRoutingKeys.notifyDeliveryStatus, {
+            persist: 0,
+            userId:  driverUsername,
+            payload: { event: 'delivery_status', orderId, deliveryStatus},
+        }),
+    ]);
+
+    console.log(`[DeliveryService] Fired WMS update, CMS update, and driver notification for orderId=${orderId}`);
+    return `Delivery ${status} — updates dispatched`;
+}
+
+
+
 // ── Event handlers (choreography) ─────────────────────────────────────────
 
 /**
@@ -229,8 +288,9 @@ async function handleWmsStatusResponse({ correlationId, orderId, deliveryStatus,
 // ── Bootstrap ─────────────────────────────────────────────────────────────
 
 (async () => {
-    internalRouter.registerRoute('POST', '/', requestDelivery);
-    internalRouter.registerRoute('GET',  '/', getDeliveryStatus);
+    internalRouter.registerRoute('POST',  '/', requestDelivery);
+    internalRouter.registerRoute('GET',   '/', getDeliveryStatus);
+    internalRouter.registerRoute('PATCH', '/', completeDelivery);
 
     await pubsub.connect();
     pubsub.subscribe(config.subscribedRoutingKeys.deliveryOrderResponse, handleDeliveryOrderResponse);

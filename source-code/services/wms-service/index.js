@@ -141,14 +141,14 @@ const server = http.createServer(async (req, res) => {
     }
     console.log(`[WMS] deliveryStatus query: orderId=${orderId}, deliveryStatus=${reservation.deliveryStatus}`);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ success: true, orderId, deliveryStatus: reservation.deliveryStatus }));
+    return res.end(JSON.stringify({ success: true, orderId, deliveryStatus: reservation.deliveryStatus, signatureUrl: reservation.signatureUrl ?? null }));
   }
 
   // ── Update delivery status for a reservation ──────────────────────────
   if (req.method === 'PATCH' && req.url === '/api/wms/delivery-status') {
     try {
       const body = JSON.parse(await readBody(req));
-      const { orderId, deliveryStatus } = body;
+      const { orderId, deliveryStatus, signatureUrl } = body;
       if (!orderId || !deliveryStatus) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ error: 'orderId and deliveryStatus are required' }));
@@ -159,7 +159,8 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ success: false, error: `No reservation found for orderId: ${orderId}` }));
       }
       reservation.deliveryStatus = deliveryStatus;
-      console.log(`[WMS] deliveryStatus updated: orderId=${orderId}, deliveryStatus=${deliveryStatus}`);
+      if (signatureUrl !== undefined) reservation.signatureUrl = signatureUrl;
+      console.log(`[WMS] deliveryStatus updated: orderId=${orderId}, deliveryStatus=${deliveryStatus}${signatureUrl ? ', signatureUrl stored' : ''}`);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ success: true }));
     } catch (err) {

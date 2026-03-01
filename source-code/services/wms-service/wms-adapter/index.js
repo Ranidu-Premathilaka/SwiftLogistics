@@ -48,8 +48,8 @@ class WMSAdapter {
         return res.data;
     }
 
-    async #updateDeliveryStatus(orderId, deliveryStatus) {
-        const res = await axios.patch(`${this.baseUrl}/delivery-status`, { orderId, deliveryStatus });
+    async #updateDeliveryStatus(orderId, deliveryStatus, signatureUrl) {
+        const res = await axios.patch(`${this.baseUrl}/delivery-status`, { orderId, deliveryStatus, ...(signatureUrl !== undefined ? { signatureUrl } : {}) });
         return res.data;
     }
 
@@ -127,10 +127,10 @@ class WMSAdapter {
         }
     }
 
-    async #handleUpdateDeliveryStatus({ correlationId, orderId, deliveryStatus }) {
+    async #handleUpdateDeliveryStatus({ correlationId, orderId, deliveryStatus, signatureUrl }) {
         console.log(`[WMSAdapter] handleUpdateDeliveryStatus: orderId=${orderId}, deliveryStatus=${deliveryStatus}`);
         try {
-            const result = await this.#updateDeliveryStatus(orderId, deliveryStatus);
+            const result = await this.#updateDeliveryStatus(orderId, deliveryStatus, signatureUrl);
             if (!result.success) {
                 console.warn(`[WMSAdapter] deliveryStatus update failed for orderId=${orderId}: ${result.error}`);
                 return;

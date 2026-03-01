@@ -8,11 +8,11 @@ sequenceDiagram
     participant NS as notify-service
 
     rect rgb(50, 20, 90)
-        note over User, NS: Query Delivery Status Workflow
-        User->>GW: GET /delivery?orderId=ORD-xxx (Authorization: Bearer JWT)
+        note over User, NS: Query Delivery Status — GET /deliveries?orderId=xxx
+        User->>GW: GET /deliveries?orderId=ORD-xxx (Authorization: Bearer JWT)
         note right of GW: Validates JWT, injects x-username
         GW->>DS: GET /?orderId=ORD-xxx (x-username injected)
-        note right of DS: correlationId = x-request-id (or generated)<br/>pendingStatusRequests[correlationId] = { userId }
+        note right of DS: correlationId = "userId-{username}-{timestamp}"<br/>userId recovered from correlationId on response — no map needed
         DS-->>GW: 200 "Delivery status request initiated"
         GW-->>User: 200 "Delivery status request initiated"
 
@@ -20,15 +20,16 @@ sequenceDiagram
         WMS->>WMSDB: GET /api/wms/delivery-status?orderId=ORD-xxx
 
         alt Reservation exists
-            WMSDB-->>WMS: { success: true, orderId, deliveryStatus }
-            note right of WMSDB: deliveryStatus is one of:<br/>null (reserved, not yet paid),<br/>ready_for_pickup (payment succeeded),<br/>on_route (driver collected)
+            WMSDB-->>WMS: { success: true, orderId, deliveryStatus, signatureUrl? }
+            note right of WMSDB: deliveryStatus is one of:<br/>null (reserved, not yet paid)<br/>ready_for_pickup (payment succeeded)<br/>on_route (driver collected)<br/>delivered / rejected (driver finalised)
             WMS-->>DS: wms.delivery.status_response { correlationId, orderId, deliveryStatus }
-        else No reservation found (orderId unknown or not yet confirmed)
+        else No reservation found
             WMSDB-->>WMS: 404 { success: false, error }
             WMS-->>DS: wms.delivery.status_response { correlationId, orderId, deliveryStatus: null, error }
         end
 
-        note right of DS: pendingStatusRequests[correlationId].userId → userId<br/>delete pendingStatusRequests[correlationId]
+        note right of DS: parse userId from correlationId prefix "userId-"
         DS-->>NS: notify.delivery.status { persist:0, userId, payload: { event, orderId, deliveryStatus, error? } }
         NS-->>User: WS delivery_status { orderId, deliveryStatus, error? }
     end
+

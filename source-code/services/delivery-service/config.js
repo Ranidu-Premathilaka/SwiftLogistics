@@ -23,6 +23,10 @@ module.exports = {
         wmsStatusRequest:     'wms.delivery.status_request',
         // { persist, userId, payload } → notify-service
         notifyDeliveryStatus: 'notify.delivery.status',
+        // { correlationId, orderId, deliveryStatus, signatureUrl? } → wms-adapter
+        updateWmsDeliveryStatus: 'wms.delivery.update_status',
+        // { correlationId, orderId, status } → cms-adapter
+        updateOrderStatus:    'cms.order.update_status',
     },
 
     subscribedRoutingKeys: {
