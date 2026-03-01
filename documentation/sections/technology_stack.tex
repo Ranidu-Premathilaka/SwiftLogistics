@@ -1,144 +1,220 @@
 \section{Technology Stack}
 \label{sec:technology}
 
-% Detailed justification of technology choices
-
 \subsection{Overview}
-% Summary of selected open-source technologies
-% Technology stack diagram
 
-\begin{figure}[H]
+The SwiftTrack prototype is built exclusively on open-source technologies. The stack centres on \textbf{Node.js} as the universal runtime for all back-end services, \textbf{RabbitMQ} as the asynchronous message broker, and \textbf{PostgreSQL} as the relational data store. Every service is individually containerised with \textbf{Docker} and the entire platform is composed and deployed with \textbf{Docker Compose}. The selection of these technologies was driven by the criteria of open-source availability, ecosystem maturity, protocol support breadth (HTTP, SOAP, WebSocket, AMQP), team familiarity, and suitability for the event-driven, microservices architectural pattern described in Section~\ref{sec:architecture}.
+
+Table~\ref{tab:tech_summary} provides a concise reference of all technologies and their roles in the platform.
+
+\begin{table}[H]
     \centering
-    \includegraphics[width=\textwidth]{figures/technology_stack.pdf}
-    \caption{Technology Stack Overview}
-    \label{fig:tech_stack}
-\end{figure}
+    \caption{Technology Stack Summary}
+    \label{tab:tech_summary}
+    \renewcommand{\arraystretch}{1.3}
+    \begin{tabular}{|l|l|p{6cm}|}
+        \hline
+        \textbf{Technology} & \textbf{Version} & \textbf{Role} \\
+        \hline
+        Node.js & 20 LTS & Runtime for all microservices \\
+        \hline
+        Express.js & 4.x & HTTP framework for Auth, Order, and Items services \\
+        \hline
+        http-proxy & 1.18 & Reverse-proxy core of the API Gateway \\
+        \hline
+        jsonwebtoken & 9.x & JWT generation and verification \\
+        \hline
+        bcryptjs & 2.x & Password hashing in the Auth Service \\
+        \hline
+        soap (npm) & 0.44 & SOAP client for the CMS Adapter \\
+        \hline
+        axios & 1.7 & HTTP client used by ROS and WMS adapters \\
+        \hline
+        amqplib & 0.10 & AMQP 0-9-1 client for all RabbitMQ interactions \\
+        \hline
+        ws & 8.x & WebSocket server in the Notification Service \\
+        \hline
+        pg & 8.x & PostgreSQL client for Node.js \\
+        \hline
+        RabbitMQ & 4 (management) & Message broker — topic exchange, pub-sub \\
+        \hline
+        PostgreSQL & 16 (alpine) & Relational database for orders, users, notifications \\
+        \hline
+        Docker & 24+ & Containerisation of every service \\
+        \hline
+        Docker Compose & v2 & Multi-container orchestration for the prototype \\
+        \hline
+    \end{tabular}
+\end{table}
 
-\subsection{Frontend Technologies}
-\label{subsec:frontend_tech}
-
-\subsubsection{Client Portal}
-% Technology: React/Angular/Vue
-% Justification for choice
-% Libraries and frameworks used
-
-\subsubsection{Driver Mobile Application}
-% Technology: React Native/Flutter
-% Cross-platform development rationale
-% Native features utilized
-
+% ─────────────────────────────────────────────────────────────
 \subsection{Backend Technologies}
 \label{subsec:backend_tech}
 
+\subsubsection{Node.js}
+
+Node.js was selected as the single runtime for every service in the platform. Its event-loop concurrency model is particularly well suited to I/O-bound workloads—such as awaiting responses from the CMS SOAP service, the ROS REST API, or a RabbitMQ broker—without requiring the overhead of thread-per-request models. The JavaScript ecosystem provides first-class, well-maintained libraries for every protocol required by the project (SOAP, REST, AMQP, WebSocket, TCP), making it possible to implement all integration adapters in a uniform language without polyglot runtime complexity. Node.js 20 LTS was used to benefit from stable performance improvements, the native \texttt{fetch} API, and long-term security support.
+
 \subsubsection{API Gateway}
-% Technology choice: Kong/Apache APISIX/Spring Cloud Gateway
-% Why this specific gateway
-% Features utilized
+
+The API Gateway is implemented using Node.js's built-in \texttt{http} module combined with the \textbf{http-proxy} library. This deliberate choice of a lightweight, purpose-built proxy—rather than a full framework—minimises the latency introduced at the entry point of every request. The gateway performs the following responsibilities:
+
+\begin{itemize}
+    \item \textbf{Authentication enforcement:} All non-public requests must carry a valid \texttt{Authorization: Bearer <JWT>} header. The gateway verifies the token using \textbf{jsonwebtoken} and rejects invalid or expired tokens with a \texttt{401 Unauthorized} response before any traffic reaches internal services.
+    \item \textbf{Identity injection:} After successful token verification, the authenticated \texttt{username} claim is injected into the forwarded request as the \texttt{x-username} header, making the client identity available to downstream services without requiring them to re-verify the token.
+    \item \textbf{Service routing:} The URL prefix of each incoming request (e.g., \texttt{/auth}, \texttt{/order}, \texttt{/notify}) is used to look up the target service in a static routing map, and the request is transparently proxied to the corresponding container over the internal Docker network.
+\end{itemize}
+
+The gateway is the only service that exposes a port to the host machine (port \texttt{8081}), ensuring that all internal services are completely isolated from direct external access.
 
 \subsubsection{Service Development Framework}
-% Spring Boot/Node.js Express/Flask/FastAPI
-% Justification for framework choice
-% Development advantages
+
+Services that expose synchronous HTTP endpoints—the \textbf{Auth Service}, \textbf{Order Service}, and \textbf{Items Service}—use \textbf{Express.js 4}. Express was chosen for its minimal footprint, mature middleware ecosystem, and widespread familiarity among Node.js developers. It provides clean routing, request body parsing, and straightforward error handling without imposing a heavyweight framework structure.
+
+Services that operate purely as event consumers and publishers—the \textbf{Payment Service}, \textbf{CMS Service}, \textbf{RMS Service}, and \textbf{WMS Service}—do not run an HTTP server at all. They use only the \textbf{amqplib} AMQP client to subscribe to RabbitMQ routing keys and publish results, keeping their resource footprint minimal.
+
+The \textbf{Notification Service} uses Node.js's built-in \texttt{http} module alongside the \textbf{ws} library to run a combined HTTP health-check endpoint and a WebSocket server on the same port.
 
 \subsubsection{Service Adapters}
-% CMS Adapter: SOAP client libraries
-% ROS Adapter: REST client implementation
-% WMS Adapter: TCP/IP socket programming
-% Technologies used for each
 
+The three legacy system adapters are the core integration components of the platform. Each adapter is encapsulated as a self-contained class that subscribes to one or more RabbitMQ routing keys, translates the incoming canonical message into the protocol required by its target system, and publishes the result back onto the exchange.
+
+\paragraph{CMS Adapter (SOAP/XML)}
+The CMS Adapter uses the \textbf{soap} npm package (v0.44) to communicate with the legacy Client Management System. The \texttt{soap} library parses the CMS WSDL definition at startup and generates a typed service client, allowing the adapter to invoke remote operations (\texttt{CreateOrder}, \texttt{UpdateOrderStatus}, \texttt{GetOrdersByUser}) as idiomatic JavaScript async function calls. The library handles all SOAP envelope construction, XML serialisation, and response deserialisation transparently, eliminating the need for manual XML manipulation.
+
+\paragraph{ROS Adapter (REST/JSON)}
+The ROS Adapter uses \textbf{axios} to make HTTP POST requests to the Route Optimisation System's REST API. Axios was selected over the native \texttt{fetch} API for its automatic JSON serialisation/deserialisation, configurable timeout support, and consistent error handling across network and HTTP-level failures. The adapter subscribes to the \texttt{rms.route.optimize} routing key, calls the ROS \texttt{/api/ros/optimize-route} endpoint, and publishes the result back on the \texttt{rms.reply} key with the original \texttt{correlationId} so the caller can match the asynchronous response.
+
+\paragraph{WMS Adapter (Proprietary HTTP over TCP/IP)}
+The WMS Adapter also uses \textbf{axios} to call the Warehouse Management System's internal HTTP REST interface, which simulates the proprietary TCP/IP protocol described in the scenario. The adapter handles three operations: fetching available stock items (\texttt{wms.items.request}), reserving stock for a confirmed order (\texttt{order.confirmed}), and releasing a reservation on payment failure (\texttt{wms.order.release}). Results are published back on dedicated reply routing keys, allowing the rest of the platform to react asynchronously.
+
+% ─────────────────────────────────────────────────────────────
 \subsection{Middleware Technologies}
 \label{subsec:middleware_tech}
 
-\subsubsection{Message Broker}
-% Choice: RabbitMQ vs Apache Kafka
-% Detailed justification
-% Configuration and setup
-% Message persistence and durability
+\subsubsection{Message Broker — RabbitMQ}
 
-\subsubsection{Service Registry and Discovery}
-% Technology: Consul/Eureka/Zookeeper
-% Why this choice
-% Integration with other components
+\textbf{RabbitMQ 4} (with the management plugin) is the central asynchronous communication backbone of the SwiftTrack platform. It was selected over alternatives such as Apache Kafka for the following reasons:
 
+\begin{itemize}
+    \item \textbf{AMQP 0-9-1 topic exchange model:} RabbitMQ's topic exchanges allow routing keys with wildcard patterns (e.g., \texttt{order.*}, \texttt{cms.*}), providing the precise, selective message routing required to fan out a single order creation event to the CMS, WMS, and ROS adapters independently.
+    \item \textbf{Message durability and delivery guarantees:} RabbitMQ supports persistent queues and messages, ensuring that events are not lost if a consumer service restarts. The platform relies on this guarantee to satisfy the requirement that no order is ever lost even if a back-end system is temporarily unavailable.
+    \item \textbf{Decoupled horizontal scalability of notification consumers:} The Notification Service creates a unique, auto-named queue per instance (e.g., \texttt{notifier.\$\{HOSTNAME\}}), all bound to the same exchange. This means that when the notification service is scaled horizontally, every instance receives all notification events and can deliver them to its own connected WebSocket clients—a pattern that is natural in RabbitMQ's exchange/binding model.
+    \item \textbf{Lightweight operational footprint:} Unlike Kafka, which requires a ZooKeeper or KRaft cluster and is optimised for high-throughput log streaming, RabbitMQ is straightforward to run as a single Docker container for a prototype while remaining deployable as a durable cluster in production.
+    \item \textbf{Management UI:} The \texttt{rabbitmq:4-management} Docker image exposes a browser-based management console on port \texttt{15672}, providing real-time visibility into queues, exchange bindings, and message rates without additional tooling.
+\end{itemize}
+
+All services connect to RabbitMQ using the \textbf{amqplib} Node.js client, which implements the full AMQP 0-9-1 protocol and supports channel-level connection multiplexing, publisher confirms, and consumer acknowledgements.
+
+% ─────────────────────────────────────────────────────────────
 \subsection{Data Layer Technologies}
 \label{subsec:data_tech}
 
-\subsubsection{Relational Database}
-% PostgreSQL/MySQL
-% Use cases in SwiftLogistics
-% Schema design approach
+\subsubsection{PostgreSQL}
 
-\subsubsection{NoSQL Database (if applicable)}
-% MongoDB/Redis
-% Use cases for document or key-value storage
-% Caching strategy
+\textbf{PostgreSQL 16} (alpine image) serves as the relational database for the three services that require persistent state:
 
+\begin{itemize}
+    \item \textbf{Auth Service:} Stores user accounts with bcrypt-hashed passwords and role information. The schema is initialised from \texttt{auth.sql} at container startup.
+    \item \textbf{CMS Service:} Persists order records including order ID, client ID, item list (stored as JSONB), and status. All order lifecycle state transitions are written here so that clients can query their order history. The schema is initialised from \texttt{cms.sql}.
+    \item \textbf{Notification Service:} Stores a notification log (user ID, message, timestamp, read status) so that notifications can be replayed to clients who were offline when an event was originally published. The schema is initialised from \texttt{notify.sql}.
+\end{itemize}
+
+PostgreSQL was chosen over document-store alternatives because the order and user data has a well-defined, relational structure that benefits from ACID transaction guarantees, particularly for the status-update operations that must atomically change an order's state and return the updated record. The \textbf{pg} (node-postgres) client library is used by all services for parameterised query execution, providing protection against SQL injection.
+
+A single shared PostgreSQL instance is used across all three services in the prototype deployment, with per-service tables isolated by naming convention. In a production deployment, each service would maintain its own database instance in line with the microservices principle of data isolation.
+
+% ─────────────────────────────────────────────────────────────
 \subsection{Infrastructure Technologies}
 \label{subsec:infrastructure_tech}
 
-\subsubsection{Containerization}
-% Docker for containerization
-% Container images for each service
-% Benefits for deployment
+\subsubsection{Containerisation with Docker}
 
-\subsubsection{Container Orchestration}
-% Kubernetes/Docker Swarm
-% Deployment configurations
-% Auto-scaling and self-healing
+Every service in the platform—including the three legacy system simulations (CMS, RMS, WMS), all core microservices, the API Gateway, RabbitMQ, and PostgreSQL—is packaged as an individual Docker container. Each application service has its own \texttt{Dockerfile}, based on the official \texttt{node:20-alpine} image, which produces a minimal, reproducible container image. Alpine-based images were preferred to reduce image size and attack surface.
 
-\subsubsection{Service Mesh (if applicable)}
-% Istio/Linkerd
-% Sidecar proxy pattern
-% Traffic management and security
+Containerisation provides the following benefits for this project:
 
-\subsection{DevOps and Monitoring}
-\label{subsec:devops_tech}
+\begin{itemize}
+    \item \textbf{Environment consistency:} The identical container image runs on any developer's machine and in any deployment environment, eliminating ``works on my machine'' discrepancies.
+    \item \textbf{Service isolation:} Each service runs in its own process namespace with its own filesystem, preventing interference between services.
+    \item \textbf{Independent deployability:} Any individual service can be rebuilt and restarted without affecting other running containers, supporting iterative development and targeted recovery.
+\end{itemize}
 
-\subsubsection{CI/CD Pipeline}
-% Jenkins/GitLab CI/GitHub Actions
-% Automated testing and deployment
+\subsubsection{Docker Compose}
 
-\subsubsection{Monitoring and Logging}
-% Prometheus + Grafana for metrics
-% ELK Stack (Elasticsearch, Logstash, Kibana) for logs
-% Distributed tracing with Jaeger/Zipkin
+\textbf{Docker Compose v2} orchestrates the entire multi-container platform for the prototype. The \texttt{docker-compose.yml} file defines all eleven services (RabbitMQ, PostgreSQL, API Gateway, Auth, Order, Items, Payment, Notify, CMS, RMS, WMS), their build contexts, environment variables, dependency ordering, health checks, and port mappings.
 
-\subsubsection{API Documentation}
-% Swagger/OpenAPI
-% API documentation generation
+Key infrastructure decisions encoded in the Compose file include:
 
+\begin{itemize}
+    \item \textbf{Internal bridge network:} All services are attached to a single Docker bridge network named \texttt{internal}. No internal service exposes its port to the host machine except the API Gateway (port \texttt{8081}) and the RabbitMQ management UI (port \texttt{15672}). Inter-service communication uses Docker's built-in container-name DNS resolution (e.g., \texttt{rabbitmq-service}, \texttt{postgres-service}).
+    \item \textbf{Health-check-based start ordering:} Services that depend on RabbitMQ use \texttt{condition: service\_healthy} with a \texttt{rabbitmq-diagnostics ping} health check, ensuring that no service attempts to connect before the broker is ready to accept connections.
+    \item \textbf{Automatic restart policy:} All services are configured with \texttt{restart: unless-stopped}, providing basic self-healing for transient failures.
+    \item \textbf{Database initialisation:} The PostgreSQL container mounts the \texttt{source-code/db/} directory as its \texttt{/docker-entrypoint-initdb.d} volume, causing all three SQL schema scripts to be executed automatically on first start.
+\end{itemize}
+
+Docker Compose is appropriate for this prototype scope. A production deployment would migrate to a container orchestration platform such as Kubernetes to gain automated horizontal scaling, rolling updates, and distributed health management across multiple hosts.
+
+% ─────────────────────────────────────────────────────────────
 \subsection{Security Technologies}
 \label{subsec:security_tech}
-% OAuth 2.0 / JWT for authentication
-% TLS/SSL for encryption
-% API key management
-% Details in Section~\ref{sec:security}
 
+\subsubsection{JSON Web Tokens (JWT)}
+
+Authentication and authorisation across the platform are implemented using \textbf{JSON Web Tokens} (RFC 7519) via the \textbf{jsonwebtoken} npm library. When a client successfully authenticates through the Auth Service, a signed JWT is issued containing the user's \texttt{username} and an expiry claim. The token is signed with an HMAC-SHA256 (\texttt{HS256}) secret that is shared between the Auth Service and the API Gateway via the \texttt{JWT\_SECRET} environment variable.
+
+All subsequent requests from the client must include this token in the \texttt{Authorization: Bearer} header. The API Gateway verifies the signature and expiry on every protected request, extracting the username and injecting it as a trusted \texttt{x-username} header for downstream services. This design means that no internal service ever needs to perform its own token verification—the gateway acts as the single enforcement point, and once a request clears the gateway the internal services trust the injected identity.
+
+\subsubsection{Password Hashing}
+
+User passwords are never stored in plain text. The Auth Service uses \textbf{bcryptjs} to hash passwords before persisting them to PostgreSQL. bcrypt's adaptive work factor makes brute-force and rainbow-table attacks computationally impractical even if the database is compromised.
+
+\subsubsection{Network-Level Isolation}
+
+As described in Section~\ref{subsec:infrastructure_tech}, all internal services are bound exclusively to the private Docker bridge network and are not reachable from outside the Docker host. This enforces a network perimeter whereby all external traffic must pass through the API Gateway, and internal service-to-service communication cannot be initiated by external actors.
+
+% ─────────────────────────────────────────────────────────────
 \subsection{Technology Selection Criteria}
 \label{subsec:tech_criteria}
-% Table summarizing selection criteria
+
+Table~\ref{tab:tech_criteria} summarises the criteria applied when evaluating and selecting each technology in the stack, along with a brief assessment of how the chosen technologies satisfy each criterion.
 
 \begin{table}[H]
     \centering
     \caption{Technology Selection Criteria}
     \label{tab:tech_criteria}
-    \begin{tabular}{|l|p{10cm}|}
+    \renewcommand{\arraystretch}{1.35}
+    \begin{tabular}{|p{3cm}|p{4.5cm}|p{5.5cm}|}
         \hline
-        \textbf{Criterion} & \textbf{Description} \\
+        \textbf{Criterion} & \textbf{Description} & \textbf{Assessment} \\
         \hline
-        Open-source & All technologies must be open-source \\
+        Open-source &
+        All technologies must be freely available under an open-source licence &
+        Node.js (MIT), Express (MIT), RabbitMQ (MPL-2.0), PostgreSQL (PostgreSQL Licence), Docker (Apache-2.0) — all fully open-source \\
         \hline
-        Community support & Active community and documentation \\
+        Protocol support &
+        Must natively support SOAP/XML, REST/JSON, AMQP, WebSocket, and TCP &
+        Node.js ecosystem provides first-class libraries for every required protocol (\texttt{soap}, \texttt{axios}, \texttt{amqplib}, \texttt{ws}) \\
         \hline
-        Maturity & Proven in production environments \\
+        Community support &
+        Active community, regular releases, and comprehensive documentation &
+        All selected libraries rank among the most downloaded packages on npm; RabbitMQ and PostgreSQL have large enterprise communities \\
         \hline
-        Performance & Meets scalability requirements \\
+        Maturity &
+        Proven in production environments at scale &
+        Node.js, RabbitMQ, and PostgreSQL are each used in large-scale production systems across the industry \\
         \hline
-        Integration & Easy integration with other components \\
+        Performance &
+        Sufficient throughput and latency for high-volume asynchronous processing &
+        RabbitMQ handles tens of thousands of messages per second; PostgreSQL provides sub-millisecond query response for the modest data volumes of this prototype \\
         \hline
-        Learning curve & Team familiarity and learning resources \\
+        Integration ease &
+        Low effort to connect components within the chosen architecture &
+        Shared Node.js runtime eliminates polyglot integration barriers; Docker Compose manages service wiring declaratively \\
+        \hline
+        Team familiarity &
+        Minimises ramp-up time and leverages existing team knowledge &
+        JavaScript/Node.js was the team's primary language; Docker and PostgreSQL are widely taught in the programme curriculum \\
         \hline
     \end{tabular}
 \end{table}
-
-% Discussion of how each technology meets criteria
