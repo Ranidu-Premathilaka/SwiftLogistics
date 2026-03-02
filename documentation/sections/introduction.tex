@@ -5,7 +5,7 @@
 \subsection{Background}
 Swift Logistics (Pvt) Ltd. is a rapidly growing logistics company in Sri Lanka, specialising in last-mile delivery for e-commerce businesses. The company serves a diverse client base ranging from large online retailers to small-scale independent sellers, managing the complete last-mile delivery lifecycle from warehouse intake to doorstep delivery.
 
-Despite its growth, Swift Logistics has historically operated with siloed, manual systems that function independently of one another. This fragmented approach has led to inefficiencies in order processing, limited visibility into delivery statuses, and an inability to scale operations during high-demand periods such as seasonal promotional events. To address these operational shortcomings and remain competitive in the growing Sri Lankan e-commerce market, Swift Logistics is replacing its legacy infrastructure with a modern, integrated platform branded as \textbf{SwiftTrack} — comprising a web-based client portal and a mobile application for delivery drivers.
+Despite its growth, Swift Logistics has historically operated with siloed, manual systems that function independently of one another. This fragmented approach has led to inefficiencies in order processing, limited visibility into delivery statuses, and an inability to scale operations during high-demand periods such as seasonal promotional events. To address these operational shortcomings and remain competitive in the growing Sri Lankan e-commerce market, Swift Logistics is replacing its legacy infrastructure with a modern, integrated platform branded as \textbf{SwiftTrack} - comprising a web-based client portal and a mobile application for delivery drivers.
 
 \subsection{Problem Statement}
 The central challenge in realising the SwiftTrack platform is the seamless integration of three critical backend systems that currently operate in isolation, each exposing a different interface and communication protocol:
@@ -16,7 +16,7 @@ The central challenge in realising the SwiftTrack platform is the seamless integ
     \item \textbf{Warehouse Management System (WMS):} An internal system that tracks packages from the point of client receipt through to vehicle loading. It communicates via a proprietary messaging protocol over TCP/IP, offering real-time status updates.
 \end{itemize}
 
-The heterogeneous nature of these systems — differing in protocol (SOAP, REST, TCP/IP), data format (XML, JSON, binary), and deployment model (on-premise, cloud, internal) — demands a robust middleware layer capable of bridging these differences transparently. Additionally, the system must support high-volume asynchronous order processing, real-time tracking and notifications, distributed transaction consistency, and secure communication across all components.
+The heterogeneous nature of these systems — differing in protocol (SOAP, REST, TCP/IP), data format (XML, JSON), and deployment model (on-premise, cloud, internal) — demands a robust middleware layer capable of bridging these differences transparently. Additionally, the system must support high-volume asynchronous order processing, real-time tracking and notifications, distributed transaction consistency, and secure communication across all components.
 
 \subsection{Objectives}
 The primary objective of this project is to design and implement a middleware architecture that integrates the CMS, ROS, and WMS into a cohesive, reliable platform underpinning SwiftTrack. The specific objectives are:
@@ -52,6 +52,5 @@ The primary objective of this project is to design and implement a middleware ar
 \begin{itemize}
     \item All components of the solution are built exclusively using open-source technologies.
     \item The APIs and messaging interfaces of the three backend systems are as described in the assignment scenario.
-    \item The prototype environment is a local development setup; production deployment considerations are discussed architecturally but not fully implemented.
 \end{itemize}
 
