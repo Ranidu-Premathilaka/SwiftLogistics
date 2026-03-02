@@ -107,13 +107,6 @@ All services operate via choreography; there is no central orchestrator. The Pub
 
 No browser UI exists; real-time delivery is verified in the test suite via the \texttt{NotificationCollector} class in \texttt{test-order-workflow.js}, which listens on a WebSocket connection and collects arriving frames. A real client would connect with \texttt{Authorization: Bearer <token>} and receive JSON frames of the form \texttt{\{persist: 0{|}1, payload: \{event, ...data\}\}}. Supported events include \texttt{payment\_intent\_created}, \texttt{payment\_completed}, \texttt{payment\_failed}, \texttt{items\_response}, \texttt{order\_query\_response}, \texttt{delivery\_route\_assigned} (driver), and \texttt{delivery\_update} (client). When a user reconnects after being offline, the Notify Service flushes any queued \texttt{pending\_notifications} rows in timestamp order.
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.9\textwidth]{figures/prototype_ui_screenshot.png}
-    \caption{Prototype Client Notification Flow (conceptual)}
-    \label{fig:proto_ui}
-\end{figure}
-
 \subsection{Real-time Tracking and Notification System}
 \label{subsec:realtime_tracking}
 
