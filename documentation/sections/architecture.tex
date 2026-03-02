@@ -1,76 +1,22 @@
-%% ╔══════════════════════════════════════════════════════════════════════════╗
-%% ║  SECTION STATUS: SKELETON — ALL SUBSECTIONS NEED CONTENT              ║
-%% ║  This section maps directly to Assignment requirement §5.1.b:          ║
-%% ║  "conceptual and implementation architectures to be drawn and           ║
-%% ║   discussed."  Everything written here should reference the actual     ║
-%% ║  source code under source-code/services/ and docker-compose.yml.      ║
-%% ╚══════════════════════════════════════════════════════════════════════════╝
-
 \section{Proposed Architecture}
 \label{sec:architecture}
 
-%% GUIDE: brief intro paragraph (2-3 sentences) stating this is an
-%%   event-driven microservices architecture built on RabbitMQ topic
-%%   exchange "swift_logistics", with an API Gateway as the sole
-%%   external entry point and 13 Docker containers.
+The SwiftTrack platform is implemented as an event-driven microservices architecture. Thirteen Docker containers communicate asynchronously through a single RabbitMQ topic exchange named \texttt{swift\_logistics}. All external traffic enters through an API Gateway; no internal service is reachable from outside the Docker network.
 
 \subsection{Conceptual Architecture}
 \label{subsec:conceptual}
 
-%% GUIDE ─ Conceptual Architecture
-%% ─────────────────────────────────────────────────────────────────────────────
-%% Describe the five conceptual layers visible in the diagram:
-%%
-%%  1. CLIENT LAYER
-%%     - SwiftTrack web portal (browser client)
-%%     - Driver mobile application
-%%     Both communicate with the platform exclusively through the API Gateway
-%%     over HTTPS (HTTP in the prototype) and WebSocket.
-%%
-%%  2. API GATEWAY LAYER
-%%     - Single external entry point.
-%%     - Performs JWT verification before forwarding any request.
-%%     - Routes on URL prefix: /auth → Auth Service, /order → Order Service,
-%%       /items → Items Service, /deliveries → Delivery Service,
-%%       /notify → Notify Service (WebSocket upgrade also proxied here).
-%%     - Injects x-username and x-role headers into forwarded requests.
-%%     - Source: source-code/services/api-gateway/index.js
-%%
-%%  3. APPLICATION SERVICE LAYER  (internal, reachable only via API Gateway)
-%%     a. Auth Service     – user registration / login / JWT refresh / logout
-%%     b. Order Service    – HTTP façade + orchestrator for the order workflow
-%%     c. Items Service    – proxy from HTTP to WMS via async RabbitMQ RPC
-%%     d. Delivery Service – driver delivery assignment + real-time route push
-%%     e. Payment Service  – pure event consumer/publisher (no HTTP server)
-%%     f. Route Service    – pure event consumer/publisher; builds ROS call
-%%     g. Notify Service   – WebSocket server + offline notification store
-%%
-%%  4. MESSAGE BROKER
-%%     - RabbitMQ single topic exchange : "swift_logistics"  (durable)
-%%     - All inter-service async communication flows through here.
-%%     - Consumers use durable queues bound to routing key patterns.
-%%     - Pattern: <system>.<entity>.<action>  e.g. "cms.order.create"
-%%
-%%  5. ADAPTER + LEGACY SYSTEM LAYER
-%%     a. CMS (cms-service container) — SOAP mock + CMSAdapter
-%%        · Legacy: Node SOAP server exposing CreateOrder,
-%%          UpdateOrderStatus, GetOrdersByUser, GetNextPendingDelivery
-%%        · Adapter: subscribes to cms.* keys, calls SOAP, re-publishes
-%%     b. ROS (ros-service container) — HTTP REST mock + ROSAdapter
-%%        · Legacy: Express server at /api/ros/optimize-route
-%%        · Adapter: subscribes to ros.route.optimize / ros.delivery.optimize
-%%     c. WMS (wms-service container) — HTTP REST mock + WMSAdapter
-%%        · Legacy: Express server at /api/wms/items, /reserve, /release
-%%        · Adapter: subscribes to wms.items.request, order.confirmed,
-%%          wms.order.release, wms.delivery.update_status
-%%
-%%  DATA LAYER (crosses layers 3 and 5)
-%%     - Single PostgreSQL 16 instance shared by Auth, CMS, and Notify
-%%       services in the prototype.
-%%     - Auth:   users, refresh_tokens tables  (auth.sql)
-%%     - CMS:    orders table with JSONB item list  (cms.sql)
-%%     - Notify: pending_notifications table  (notify.sql)
-%% ─────────────────────────────────────────────────────────────────────────────
+The architecture is organised into five conceptual layers, shown in Figure~\ref{fig:conceptual_arch}.
+
+\textbf{Client Layer.} The SwiftTrack web portal and the driver mobile application communicate with the platform exclusively through the API Gateway over HTTP and WebSocket.
+
+\textbf{API Gateway Layer.} A single Node.js proxy (port~8081) is the sole externally reachable component. It verifies a JWT on every non-public request, injects \texttt{x-username} and \texttt{x-role} headers into the forwarded request, and routes by URL prefix to the corresponding internal service.
+
+\textbf{Application Service Layer.} Seven Node.js services implement business logic. Auth, Order, Items, Delivery, and Notify services expose HTTP endpoints accessible through the gateway. Payment and Route services have no HTTP interface and participate only through RabbitMQ.
+
+\textbf{Message Broker Layer.} RabbitMQ~4 hosts a single durable topic exchange named \texttt{swift\_logistics}. All asynchronous inter-service communication passes through this exchange. Routing keys follow the pattern \texttt{<target>.<entity>.<action>} (e.g.\ \texttt{cms.order.create}, \texttt{order.wms.reserved}).
+
+\textbf{Adapter and Legacy System Layer.} Three containers each co-host a mock legacy system and its adapter. The CMS Adapter bridges AMQP to SOAP, the ROS Adapter bridges AMQP to REST, and the WMS Adapter bridges AMQP to the proprietary TCP/IP protocol (simulated as intra-container HTTP). A shared PostgreSQL~16 instance persists data for the Auth, CMS, and Notify services.
 
 \begin{figure}[H]
     \centering
@@ -79,59 +25,40 @@
     \label{fig:conceptual_arch}
 \end{figure}
 
-%% GUIDE: After figure, add a paragraph describing the communication flows:
-%%  - Synchronous (HTTP/REST) path: Client → API Gateway → Application Service
-%%    (used for request submission and immediate acknowledgement)
-%%  - Asynchronous (AMQP) path: Application Service → Exchange → Adapter →
-%%    Legacy System → Adapter → Exchange → Application Service
-%%    (used for all backend processing)
-%%  - Real-time push (WebSocket) path: Notify Service → API Gateway → Client
-%%    (used for status updates and driver notifications)
+Three communication paths operate in parallel. Synchronous HTTP requests travel from the client through the API Gateway to an application service, which returns an immediate acknowledgement. Asynchronous AMQP messages travel between application services and adapters via the exchange, with each adapter performing the necessary protocol translation before calling its legacy system. Real-time WebSocket frames travel from the Notify Service, through the API Gateway WebSocket proxy, to the connected client or driver.
 
 \subsection{Implementation Architecture}
 \label{subsec:implementation}
 
-%% GUIDE ─ Implementation Architecture
-%% ─────────────────────────────────────────────────────────────────────────
-%% Describe the concrete runtime environment derived from docker-compose.yml.
-%%
-%%  CONTAINERS (13 total, all on Docker bridge network "internal"):
-%%  ┌─────────────────────┬──────────────────────────────────────────────┐
-%%  │ Container           │ Details                                      │
-%%  ├─────────────────────┼──────────────────────────────────────────────┤
-%%  │ api-gateway-service │ Node.js + http-proxy; host port 8081→8080    │
-%%  │ auth-service        │ Node.js + Express; internal only             │
-%%  │ order-service       │ Node.js + Express; internal only             │
-%%  │ items-service       │ Node.js + Express; internal only             │
-%%  │ delivery-service    │ Node.js + Express; internal only             │
-%%  │ payment-service     │ Node.js pub/sub only; no HTTP server         │
-%%  │ route-service       │ Node.js pub/sub only; no HTTP server         │
-%%  │ notify-service      │ Node.js + ws (WebSocket); internal only      │
-%%  │ cms-service         │ Node.js SOAP server + CMSAdapter + PostgreSQL│
-%%  │ ros-service         │ Node.js HTTP server + ROSAdapter             │
-%%  │ wms-service         │ Node.js HTTP server + WMSAdapter             │
-%%  │ rabbitmq-service    │ rabbitmq:4-management; host port 15672 (mgmt)│
-%%  │ postgres-service    │ postgres:16-alpine; internal only            │
-%%  └─────────────────────┴──────────────────────────────────────────────┘
-%%
-%%  KEY NETWORKING DECISIONS (docker-compose.yml lines 190-222):
-%%  - All containers share a single Docker bridge network "internal".
-%%  - Only api-gateway-service exposes port 8081 to the host (external traffic).
-%%  - RabbitMQ management UI is accessible on host port 15672 (dev convenience).
-%%  - Inter-service DNS uses container names (e.g. "rabbitmq-service", "postgres-service").
-%%  - No internal service port is reachable from outside the Docker host.
-%%
-%%  START-ORDER (docker-compose.yml depends_on):
-%%  - rabbitmq must pass healthcheck (rabbitmq-diagnostics ping) before any
-%%    RabbitMQ-dependent service starts.
-%%  - postgres must be started before auth, cms, and notify services.
-%%
-%%  ENVIRONMENT VARIABLES (injected at runtime):
-%%  - JWT_SECRET   : shared between api-gateway and auth-service.
-%%  - RABBITMQ_URL : amqp://guest:guest@rabbitmq-service:5672
-%%  - DB_*         : DB_HOST=postgres-service, DB_USER, DB_PASSWORD, DB_NAME
-%%  - All default to development values if not set in .env file.
-%% ─────────────────────────────────────────────────────────────────────────
+The full deployment is defined in \texttt{docker-compose.yml}. All thirteen containers share a single Docker bridge network named \texttt{internal}. Only two ports are forwarded to the host: \texttt{8081} (API Gateway, external-facing) and \texttt{15672} (RabbitMQ management UI, development convenience). Table~\ref{tab:containers} lists each container.
+
+\begin{table}[H]
+    \centering
+    \caption{Docker Containers}
+    \label{tab:containers}
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{|l|l|c|}
+        \hline
+        \textbf{Container} & \textbf{Technology} & \textbf{Host Port} \\
+        \hline
+        api-gateway-service & Node.js + http-proxy & 8081 \\
+        auth-service        & Node.js + Express    & --- \\
+        order-service       & Node.js + Express    & --- \\
+        items-service       & Node.js + Express    & --- \\
+        delivery-service    & Node.js + Express    & --- \\
+        payment-service     & Node.js (pub/sub)    & --- \\
+        route-service       & Node.js (pub/sub)    & --- \\
+        notify-service      & Node.js + ws         & --- \\
+        cms-service         & Node.js SOAP + pg    & --- \\
+        ros-service         & Node.js + Express    & --- \\
+        wms-service         & Node.js + Express    & --- \\
+        rabbitmq-service    & RabbitMQ 4-management & 15672 \\
+        postgres-service    & PostgreSQL 16-alpine & --- \\
+        \hline
+    \end{tabular}
+\end{table}
+
+Services that depend on RabbitMQ declare \texttt{depends\_on: condition: service\_healthy} so no container attempts an AMQP connection before the broker passes its health check (\texttt{rabbitmq-diagnostics ping}). PostgreSQL-dependent services wait similarly. Every container uses \texttt{restart: unless-stopped} for basic self-healing. Inter-service DNS uses the container names defined in the Compose file (e.g.\ \texttt{rabbitmq-service}, \texttt{postgres-service}). Credentials and secrets are injected via environment variables; \texttt{JWT\_SECRET} is shared between the API Gateway and Auth Service.
 
 \begin{figure}[H]
     \centering
@@ -143,210 +70,78 @@
 \subsection{Component Descriptions}
 \label{subsec:components}
 
-%% GUIDE: For each subsubsection below, write 1-2 paragraphs describing
-%%   the component's purpose, technology choices, and key responsibilities.
-%%   Use bullet points only where listing multiple discrete items. Keep it simple and factual.
-
 \subsubsection{Client Portal and Driver Mobile Application}
-%% GUIDE:
-%%  - Neither is implemented in the prototype; describe them as planned components.
-%%  - Client portal: web SPA communicating with API Gateway over HTTP + WebSocket
-%%    for real-time order status updates (via /notify).
-%%  - Driver mobile app: native or PWA; authenticates as role="driver"; uses
-%%    POST /deliveries to request a delivery manifest and receives the optimised
-%%    route via WebSocket push from Notify Service.
-%%  - Both authenticate via /auth/login and include the JWT as
-%%    "Authorization: Bearer <token>" on every subsequent request.
-%%  Source: source-code/services/api-gateway/config.js (publicPrefixes)
+
+Neither client is implemented in the prototype; both are planned components. The web portal is a single-page application that communicates with the API Gateway over HTTP and maintains a WebSocket connection to \texttt{/notify} for real-time order status updates. The driver mobile application authenticates with the role \texttt{driver}, calls \texttt{POST /deliveries} to request a delivery manifest, and receives optimised route assignments via WebSocket push. Both clients authenticate via \texttt{POST /auth/login} and attach the issued JWT as an \texttt{Authorization: Bearer} header on all subsequent requests. Public routes (\texttt{/auth/signup}, \texttt{/auth/login}, \texttt{/health}) bypass JWT verification in the gateway.
 
 \subsubsection{API Gateway}
-%% GUIDE:
-%%  - Implemented in: source-code/services/api-gateway/index.js
-%%  - Technology: Node.js built-in http module + http-proxy library.
-%%  - Three responsibilities:
-%%     1. Authentication enforcement: validateToken() verifies HS256 JWT
-%%        using jsonwebtoken; rejects with 401 if missing, malformed, or expired.
-%%     2. Identity injection: injects x-username and x-role headers into every
-%%        forwarded request so downstream services trust the identity without
-%%        re-verifying the token.
-%%     3. Routing: resolveTarget() strips the service prefix from the URL and
-%%        forwards to the correct internal container using the serviceMap in config.js.
-%%        Routes: /auth → auth-service:3000, /order → order-service:3000,
-%%                /items → items-service:3000, /deliveries → delivery-service:3000,
-%%                /notify → notify-service:3000.
-%%  - WebSocket upgrades are also proxied via proxy.ws() in the 'upgrade' event handler.
-%%  - Only container with a host-exposed port (8081).
-%%  Source: source-code/services/api-gateway/index.js + config.js
+
+Implemented in \texttt{source-code/services/api-gateway/index.js} using Node.js's built-in \texttt{http} module and the \texttt{http-proxy} library. It performs three functions: JWT authentication (\texttt{validateToken()} verifies the HS256 token and rejects invalid requests with HTTP~401); identity injection (the verified \texttt{username} and \texttt{role} claims are forwarded as \texttt{x-username} and \texttt{x-role} headers so downstream services need not re-verify the token); and routing (\texttt{resolveTarget()} maps URL prefix to internal service address: \texttt{/auth}~→~\texttt{auth-service:3000}, \texttt{/order}~→~\texttt{order-service:3000}, \texttt{/items}~→~\texttt{items-service:3000}, \texttt{/deliveries}~→~\texttt{delivery-service:3000}, \texttt{/notify}~→~\texttt{notify-service:3000}). WebSocket upgrades are proxied via the \texttt{upgrade} event handler.
 
 \subsubsection{Auth Service}
-%% GUIDE:
-%%  - Implemented in: source-code/services/auth-service/index.js
-%%  - Technology: Express.js via InternalRouter, bcryptjs, jsonwebtoken, pg.
-%%  - Four routes: POST /signup, POST /login, POST /refresh, POST /logout.
-%%  - Issues an accessToken (short-lived) and a refreshToken (long-lived) on login.
-%%  - Refresh tokens are stored in the refresh_tokens table (PostgreSQL) and
-%%    invalidated on logout; this allows server-side session revocation.
-%%  - Passwords are hashed with bcrypt (cost factor 10) before storage.
-%%  Source: source-code/services/auth-service/index.js + config.js
+
+Implemented in \texttt{source-code/services/auth-service/index.js} using Express.js, \texttt{bcryptjs}, \texttt{jsonwebtoken}, and \texttt{node-postgres}. It exposes four routes: \texttt{POST /signup}, \texttt{POST /login}, \texttt{POST /refresh}, and \texttt{POST /logout}. On login it issues a short-lived access token and a long-lived refresh token, both signed with HS256. Refresh tokens are stored in the \texttt{refresh\_tokens} table and deleted on logout, enabling server-side session revocation. Passwords are hashed with bcrypt at cost factor~10 and are never stored or logged in plain text.
 
 \subsubsection{Order Service}
-%% GUIDE:
-%%  - Implemented in: source-code/services/order-service/index.js
-%%  - Technology: Express.js via InternalRouter + PubSub (amqplib).
-%%  - Acts as the primary orchestrator for the order creation flow.
-%%  - Two HTTP endpoints: POST /order (create), PATCH /order (confirm), GET /order (query).
-%%  - Uses in-memory Maps (pendingPayments, pendingDeliveryRequests) to stash
-%%    correlation state while awaiting async responses from downstream services.
-%%  - Publishes to: cms.order.create, cms.order.update_status, order.confirmed,
-%%    wms.order.release, payment.charge, notify.*, cms.delivery.request_next.
-%%  - Subscribes to: order.status_updated, order.wms.reserved,
-%%    order.wms.reservation_failed, order.payment.completed, order.payment.failed,
-%%    order.cms.order_response, order.delivery.request_next, order.cms.delivery_response.
-%%  Source: source-code/services/order-service/index.js + config.js
+
+Implemented in \texttt{source-code/services/order-service/index.js} using Express.js via
+\texttt{InternalRouter} and the shared \texttt{PubSub} client. It exposes three HTTP
+endpoints (\texttt{POST /order}, \texttt{PATCH /order}, \texttt{GET /order}) and drives
+the choreography-based Saga described in Section~\ref{sec:architectural_patterns}.
+In-memory \texttt{Maps} (\texttt{pendingPayments}, \texttt{pendingDeliveryRequests}) hold
+correlation state while awaiting asynchronous replies from downstream services. It
+publishes to keys including \texttt{cms.order.create}, \texttt{payment.charge}, and
+\texttt{wms.order.release}, and subscribes to the corresponding response keys such as
+\texttt{order.payment.completed} and \texttt{order.wms.reserved}.
 
 \subsubsection{Items Service}
-%% GUIDE:
-%%  - Implemented in: source-code/services/items-service/index.js
-%%  - Technology: Express.js via InternalRouter + PubSub.
-%%  - Single GET / endpoint that fires wms.items.request and awaits wms.items.response
-%%    (async RPC pattern via RabbitMQ; response delivered to client via WebSocket push).
-%%  - Demonstrates that client-facing services never call legacy systems directly—
-%%    always via the adapter layer through the broker.
-%%  Source: source-code/services/items-service/index.js
+
+Implemented in \texttt{source-code/services/items-service/index.js} using Express.js and PubSub. It exposes a single \texttt{GET /} endpoint. On each request it publishes \texttt{wms.items.request} with a \texttt{correlationId} and stores the ID in a pending-requests map. When the WMS Adapter replies on \texttt{wms.items.response}, the result is forwarded to the client via the Notify Service. Clients never call the WMS directly; all communication is mediated through the adapter layer.
 
 \subsubsection{Delivery Service}
-%% GUIDE:
-%%  - Implemented in: source-code/services/delivery-service/index.js
-%%  - Technology: Express.js via InternalRouter + PubSub.
-%%  - POST /: driver requests N packages; publishes order.delivery.request_next,
-%%    receives orders from CMS adapter, calls Route Service to optimise,
-%%    and pushes the route to the driver via Notify Service (WebSocket).
-%%  - GET /?orderId=: fetches delivery status from WMS adapter asynchronously.
-%%  - PATCH /: driver marks delivery as delivered/failed; updates WMS status,
-%%    notifies the client (order owner) via Notify Service.
-%%  Source: source-code/services/delivery-service/index.js
+
+Implemented in \texttt{source-code/services/delivery-service/index.js} using Express.js and PubSub. \texttt{POST /} is called by a driver to request a delivery manifest: the service publishes \texttt{order.delivery.request\_next}, receives pending orders from the CMS Adapter, requests a route from the ROS Adapter via the Route Service, and pushes the result to the driver via a \texttt{notify.<driver>.delivery\_route\_assigned} event. \texttt{GET /} queries the WMS for current delivery status asynchronously. \texttt{PATCH /} marks a delivery as completed or failed, updates the WMS, and publishes a \texttt{notify.<clientId>.delivery\_update} event so the order owner is informed immediately.
 
 \subsubsection{Payment Service}
-%% GUIDE:
-%%  - Implemented in: source-code/services/payment-service/index.js
-%%  - Technology: PubSub only (no HTTP server).
-%%  - Subscribes to order.created → creates payment intent → notifies client.
-%%  - Subscribes to payment.charge → simulates charge (~90% success rate) →
-%%    publishes order.payment.completed or order.payment.failed.
-%%  - In production this would integrate with a real payment processor (Stripe, etc.).
-%%  Source: source-code/services/payment-service/index.js
+
+Implemented in \texttt{source-code/services/payment-service/index.js} using PubSub only; it has no HTTP server. It subscribes to \texttt{order.created} to create a payment intent and notify the client. It subscribes to \texttt{payment.charge} to simulate processing: on success it publishes \texttt{order.payment.completed}; on failure it publishes \texttt{order.payment.failed}. The simulated success rate is approximately 90\%. In production this service would call a real payment processor.
 
 \subsubsection{Route Service}
-%% GUIDE:
-%%  - Implemented in: source-code/services/route-service/index.js
-%%  - Technology: PubSub only (no HTTP server).
-%%  - Maintains an in-memory orderId→location index, populated from order.created events.
-%%  - Subscribes to route.delivery.path_requested; builds a list of stops, calls
-%%    the ROS legacy system via ros.delivery.optimize, and publishes
-%%    delivery.route.path_response back to delivery-service.
-%%  - Also subscribes to order status change events to remove entries from the
-%%    index when orders leave the pending_delivery state.
-%%  Source: source-code/services/route-service/index.js
+
+Implemented in \texttt{source-code/services/route-service/index.js} using PubSub only; it has no HTTP server. It maintains an in-memory \texttt{orderId}$\to$\texttt{location} index populated from \texttt{order.created} events. When it receives \texttt{route.delivery.path\_requested} from the Delivery Service, it assembles the list of stops, publishes \texttt{ros.delivery.optimize}, and when the ROS Adapter replies forwards the result as \texttt{delivery.route.path\_response}. Entries are removed from the index when orders leave the \texttt{pending\_delivery} state.
 
 \subsubsection{Notify Service}
-%% GUIDE:
-%%  - Implemented in: source-code/services/notify-service/index.js
-%%  - Technology: Node.js http + ws WebSocket server, PubSub, pg.
-%%  - Per-user WebSocket connection map: Map<userId, Set<WebSocket>>.
-%%  - Subscribes to all notify.* routing keys on a unique per-instance queue
-%%    (notifier.${HOSTNAME}), enabling horizontal scaling where each instance
-%%    delivers to its own connected users.
-%%  - Offline persistence: if the user is absent and persist=1, the notification
-%%    is stored in pending_notifications (PostgreSQL) and flushed on reconnect.
-%%  Source: source-code/services/notify-service/index.js
+
+Implemented in \texttt{source-code/services/notify-service/index.js} using Node.js's \texttt{http} module, the \texttt{ws} WebSocket library, PubSub, and \texttt{node-postgres}. It maintains a \texttt{Map<userId, Set<WebSocket>>} of active connections and subscribes to all \texttt{notify.*} routing keys on a unique per-instance queue (\texttt{notifier.\$\{HOSTNAME\}}). When a notification arrives for a connected user it sends a JSON frame immediately. When the user is offline and \texttt{persist=1}, the notification is stored in the \texttt{pending\_notifications} table and flushed in timestamp order on the next WebSocket connection. The unique-queue design allows horizontal scale-out: each additional instance receives all notification events independently and serves its own connected users.
 
 \subsubsection{CMS Service (Legacy + Adapter)}
-%% GUIDE:
-%%  - Implemented in: source-code/services/cms-service/index.js (SOAP server)
-%%               and: source-code/services/cms-service/cms-adapter/index.js
-%%  - The same Docker container runs both the mock legacy SOAP server and the
-%%    CMS Adapter.  The adapter calls the SOAP server at 127.0.0.1:3000 (intra-container).
-%%  - WSDL: source-code/services/cms-service/cms.wsdl (defines CreateOrder,
-%%    UpdateOrderStatus, GetOrdersByUser, GetNextPendingDelivery operations).
-%%  - Uses soap npm (v0.44) to create a typed client from the WSDL at startup.
-%%  - Persists orders to PostgreSQL (cms.sql schema) including JSONB item list.
-%%  Source: source-code/services/cms-service/
+
+The CMS container runs two processes: a mock SOAP server (\texttt{cms-service/index.js}) and the CMS Adapter (\texttt{cms-service/cms-adapter/index.js}). The SOAP server is described by \texttt{cms.wsdl} and implements four operations: \texttt{CreateOrder}, \texttt{UpdateOrderStatus}, \texttt{GetOrdersByUser}, and \texttt{GetNextPendingDelivery}. Orders are persisted to PostgreSQL with a JSONB \texttt{itemList} column. The CMS Adapter creates a typed SOAP client from the WSDL at startup using the \texttt{soap} library, subscribes to \texttt{cms.*} routing keys on the exchange, invokes the appropriate SOAP operation, and re-publishes the result on the reply key. The adapter reaches the SOAP server at \texttt{127.0.0.1:3000} within the same container.
 
 \subsubsection{ROS Service (Legacy + Adapter)}
-%% GUIDE:
-%%  - Implemented in: source-code/services/ros-service/index.js (Express HTTP server)
-%%               and: source-code/services/ros-service/ros-adapter/index.js
-%%  - The same Docker container runs both the mock ROS REST server and the ROSAdapter.
-%%  - Exposes a single endpoint: POST /api/ros/optimize-route, which returns a
-%%    dummy optimised sequence for the provided locations array.
-%%  - Adapter uses axios to call the endpoint; subscribes to ros.route.optimize
-%%    and ros.delivery.optimize; publishes results back on ros.reply / ros.delivery.reply.
-%%  Source: source-code/services/ros-service/
+
+The ROS container runs a mock REST server (\texttt{ros-service/index.js}) and the ROS Adapter (\texttt{ros-service/ros-adapter/index.js}). The mock server exposes a single endpoint, \texttt{POST /api/ros/optimize-route}, which returns the provided locations array reordered as a dummy optimised sequence. The ROS Adapter subscribes to \texttt{ros.route.optimize} and \texttt{ros.delivery.optimize}, calls the REST endpoint via \texttt{axios}, and re-publishes the result on the corresponding reply key. Both components run in the same container; the adapter calls \texttt{127.0.0.1:3000} internally.
 
 \subsubsection{WMS Service (Legacy + Adapter)}
-%% GUIDE:
-%%  - Implemented in: source-code/services/wms-service/index.js (Express HTTP server)
-%%               and: source-code/services/wms-service/wms-adapter/index.js
-%%  - Mock WMS exposes: GET /api/wms/items, POST /api/wms/reserve,
-%%    POST /api/wms/release, PATCH /api/wms/delivery-status,
-%%    GET /api/wms/delivery-status.
-%%  - Simulates the proprietary TCP/IP protocol described in the assignment
-%%    using standard HTTP internally (intra-container at 127.0.0.1).
-%%  - Adapter subscribes to: wms.items.request, order.confirmed, wms.order.release,
-%%    wms.delivery.update_status, wms.delivery.status_request.
-%%  Source: source-code/services/wms-service/
 
-\subsubsection{Message Broker — RabbitMQ}
-%% GUIDE:
-%%  - rabbitmq:4-management Docker image.
-%%  - Single topic exchange: "swift_logistics" (durable).
-%%  - All queues are durable; messages survive broker restarts.
-%%  - Routing key convention: <target_layer>.<entity>.<action>
-%%    e.g. cms.order.create, order.wms.reserved, notify.order.payment_completed
-%%  - Notify Service uses unique per-instance queues (notifier.${HOSTNAME})
-%%    bound to notify.* patterns; all other services use stable named queues.
-%%  - Management UI accessible at http://localhost:15672 during development.
-%%  Source: PubSub utility — source-code/services/utility/pubsub.js
+The WMS container runs a mock REST server (\texttt{wms-service/index.js}) and the WMS Adapter (\texttt{wms-service/wms-adapter/index.js}). The mock server exposes five endpoints: \texttt{GET /api/wms/items}, \texttt{POST /api/wms/reserve}, \texttt{POST /api/wms/release}, \texttt{PATCH /api/wms/delivery-status}, and \texttt{GET /api/wms/delivery-status}. Inventory is held in-memory and resets when the container restarts. The WMS Adapter subscribes to \texttt{wms.items.request}, \texttt{order.confirmed}, \texttt{wms.order.release}, \texttt{wms.delivery.update\_status}, and \texttt{wms.delivery.status\_request}, calls the corresponding mock endpoints via \texttt{axios}, and re-publishes results on reply keys. The proprietary TCP/IP boundary is simulated by the intra-container HTTP call.
 
-\subsubsection{Data Persistence — PostgreSQL}
-%% GUIDE:
-%%  - postgres:16-alpine Docker image.
-%%  - Single shared instance in prototype (see technology_stack.tex §4.3 for details).
-%%  - Three schema files auto-executed on first start via /docker-entrypoint-initdb.d:
-%%     · auth.sql   — users, refresh_tokens tables
-%%     · cms.sql    — orders table (orderId, clientId, itemList JSONB, status, destination)
-%%     · notify.sql — pending_notifications table
-%%  - Accessed via node-postgres (pg) client with parameterised queries.
-%%  Source: source-code/db/
+\subsubsection{Message Broker --- RabbitMQ}
+
+The platform uses the \texttt{rabbitmq:4-management} Docker image. A single durable topic exchange named \texttt{swift\_logistics} is declared by the first service that connects. All queues are durable, ensuring messages survive broker restarts. The routing key convention is \texttt{<target>.<entity>.<action>} (e.g.\ \texttt{cms.order.create}, \texttt{order.wms.reserved}). The Notify Service uses unique per-instance queues (\texttt{notifier.\$\{HOSTNAME\}}) bound to \texttt{notify.*}; all other services use stable named queues. Connection and subscription management is centralised in \texttt{source-code/services/utility/pubsub.js}, which provides auto-reconnect with a five-second back-off and automatic subscriber re-registration on reconnect.
+
+\subsubsection{Data Persistence --- PostgreSQL}
+
+The platform uses a single \texttt{postgres:16-alpine} instance in the prototype. Three schema scripts in \texttt{source-code/db/} are executed automatically on first container start via the \texttt{/docker-entrypoint-initdb.d} mechanism: \texttt{auth.sql} creates the \texttt{users} and \texttt{refresh\_tokens} tables; \texttt{cms.sql} creates the \texttt{orders} table (with a JSONB \texttt{itemList} column); \texttt{notify.sql} creates the \texttt{pending\_notifications} table. All services access the database via the shared \texttt{db.js} connection pool utility using parameterised queries.
 
 \subsection{Deployment Architecture}
 \label{subsec:deployment}
 
-%% GUIDE ─ Deployment Architecture
-%% ─────────────────────────────────────────────────────────────────────────
-%%  Describe the Docker Compose-based deployment model used in the prototype
-%%  and briefly contrast with a production Kubernetes deployment.
-%%
-%%  Key points to cover:
-%%  1. All 13 services defined in a single docker-compose.yml at the repo root.
-%%  2. Build context: ./source-code with per-service Dockerfiles that all
-%%     extend node:20-alpine for a minimal, reproducible base image.
-%%  3. Health-check ordering: services with RabbitMQ dependencies use
-%%     depends_on: condition: service_healthy so no service attempts AMQP
-%%     connection before the broker is ready.
-%%  4. restart: unless-stopped on every service for basic self-healing.
-%%  5. Network isolation: single internal bridge with only two host ports
-%%     exposed (8081 gateway, 15672 RabbitMQ management).
-%%  6. Database init: postgres volume mount of ./source-code/db runs all three
-%%     SQL files automatically on first container start.
-%%
-%%  Production note: Docker Compose suffices for the prototype. A production
-%%  deployment would use Kubernetes (or Docker Swarm) for:
-%%  - Horizontal pod autoscaling (HPA) on order, notify, and delivery services.
-%%  - Rolling updates without downtime.
-%%  - RabbitMQ cluster with mirrored queues.
-%%  - PostgreSQL per-service instances with connection pooling (PgBouncer).
-%% ─────────────────────────────────────────────────────────────────────────
+All thirteen services are defined in a single \texttt{docker-compose.yml} at the repository root. Every service image extends \texttt{node:20-alpine}, providing a minimal and reproducible base. The database schema files in \texttt{source-code/db/} are mounted to the PostgreSQL container's \texttt{/docker-entrypoint-initdb.d} directory and applied automatically on first start.
+
+Health-check ordering prevents startup race conditions. RabbitMQ declares a health check that runs \texttt{rabbitmq-diagnostics ping} at five-second intervals; all AMQP-dependent services wait for it to pass before starting. The entire platform is brought up with a single \texttt{docker compose up --build} command. Every container is configured with \texttt{restart: unless-stopped} so Docker automatically recovers individual failures without operator intervention.
+
+For production, Docker Compose would be replaced by Kubernetes to support horizontal pod autoscaling on the Order, Notify, and Delivery services, rolling updates, a RabbitMQ cluster with mirrored queues, and per-service PostgreSQL instances.
 
 \begin{figure}[H]
     \centering
@@ -358,40 +153,12 @@
 \subsection{Rationale for Final Architecture}
 \label{subsec:rationale}
 
-%% GUIDE ─ Rationale
-%% ─────────────────────────────────────────────────────────────────────────
-%%  Explain WHY event-driven microservices was chosen over the two alternatives
-%%  (cross-reference §\ref{sec:alternatives}). Cover four dimensions:
-%%
-%%  1. HETEROGENEOUS INTEGRATION
-%%     Each legacy system (CMS SOAP, ROS REST, WMS proprietary TCP/IP) is
-%%     isolated behind its own adapter container. Protocol translation is
-%%     encapsulated within the adapter; no other service ever knows or cares
-%%     what protocol the CMS uses.
-%%
-%%  2. ASYNCHRONOUS HIGH-VOLUME PROCESSING
-%%     RabbitMQ's durable queues decouple order receipt from backend processing.
-%%     The Order Service can acknowledge the client immediately (HTTP 200) and
-%%     publish to the exchange. Backend adapters process from their queues at
-%%     their own pace, enabling burst absorption during Avurudu/Black Friday sales
-%%     without blocking the client portal.
-%%
-%%  3. RESILIENCE AND GUARANTEED DELIVERY
-%%     Durable queues with persistent messages mean that if the CMS adapter
-%%     restarts mid-processing, the message is redelivered automatically because
-%%     ack is only sent after successful processing (manual ack in pubsub.js).
-%%     restart: unless-stopped provides container-level self-healing.
-%%
-%%  4. INDEPENDENT SCALABILITY
-%%     Each container is independently deployable and scalable. In a production
-%%     Kubernetes deployment, notify and order services can be scaled out during
-%%     peak hours without touching the auth or payment services.
-%%
-%%  TRADE-OFFS
-%%  - Higher initial complexity than a three-tier approach: 13 containers,
-%%    distributed tracing across async flows, eventual consistency rather than
-%%    immediate consistency.
-%%  - Accepted trade-off: the operational benefits at scale outweigh the
-%%    additional setup cost, especially as the team has unified on JavaScript/Node.js,
-%%    minimising the polyglot complexity that often accompanies microservices.
-%% ─────────────────────────────────────────────────────────────────────────
+The event-driven microservices architecture was selected over the two alternatives evaluated in Section~\ref{sec:alternatives} because it best satisfies the four most demanding requirements of the platform.
+
+Heterogeneous integration is addressed by encapsulating each legacy protocol within a dedicated adapter container. The CMS SOAP contract, the ROS REST interface, and the WMS proprietary protocol are hidden behind an identical AMQP interface. Replacing any legacy system requires modifying only its adapter; all other services remain unchanged.
+
+High-volume asynchronous processing is addressed by placing RabbitMQ durable queues between order submission and backend processing. The Order Service acknowledges the client immediately and publishes an event; CMS, WMS, Payment, and ROS adapters process from their own queues at their own pace. During peak load the queues act as a buffer, preventing back-pressure from reaching the client portal. Because consumer ACKs are sent only after successful processing, no message is lost if a consumer container restarts mid-operation.
+
+Independent scalability is achieved because each of the thirteen containers is a separately deployable unit. In a Kubernetes deployment, Order, Notify, and Delivery services can be scaled out independently during peak hours.
+
+The accepted trade-off is higher initial complexity: thirteen containers, distributed tracing across asynchronous flows, and eventual consistency rather than immediate consistency. This is mitigated by unifying on a single runtime (Node.js) and sharing utility modules (\texttt{pubsub.js}, \texttt{db.js}, \texttt{internalRouter.js}) across all services.

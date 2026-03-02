@@ -1,57 +1,31 @@
-%% ╔══════════════════════════════════════════════════════════════════════════╗
-%% ║  SECTION STATUS: SKELETON — ALL SUBSECTIONS NEED CONTENT              ║
-%% ║  Maps to assignment §5.1.e: "information security considerations taken ║
-%% ║  during the design and implementation of the solution."                ║
-%% ║  Distinguish clearly between IMPLEMENTED (prototype) and DESIGNED-FOR ║
-%% ║  (production) controls. Remove subsections with no relevance.         ║
-%% ╚══════════════════════════════════════════════════════════════════════════╝
-
 \section{Information Security Considerations}
 \label{sec:security}
 
-%% GUIDE: opening paragraph stating this section covers security considerations
-%%   applied at the design level and those implemented in the prototype.
-%%   Reference the requirement: "all communication, especially between the
-%%   client portal and the backend, and with external APIs like ROS, must be secure."
+This section covers security controls applied at design time and those implemented in the prototype. A clear distinction is made between controls that are operational and those deferred to a production deployment.
 
 \subsection{Security Requirements}
 \label{subsec:security_requirements}
 
-%% GUIDE: list the security goals derived from the assignment and architecture:
-%%  1. All external client-to-backend communication must be authenticated.
-%%  2. Sensitive user credentials must be stored irreversibly (one-way hash).
-%%  3. Internal services must not be directly reachable from outside the platform.
-%%  4. Communication with the third-party ROS API must be secure.
-%%  5. No order or user data should be lost or exposed due to a single component failure.
-%%  6. API must be resistant to common injection attacks.
-%%  Threat model summary: external HTTP attackers, stolen credentials, insider access.
+The security goals for SwiftTrack are:
+\begin{enumerate}
+    \item All external client-to-backend communication must be authenticated.
+    \item User credentials must be stored as one-way hashes.
+    \item Internal services must not be directly reachable from outside the platform.
+    \item Communication with the third-party ROS API must be secured.
+    \item No user data should be lost or exposed due to a single component failure.
+    \item The API must be resistant to common injection attacks.
+\end{enumerate}
 
 \subsection{Authentication and Authorisation}
 \label{subsec:auth}
 
 \subsubsection{JWT-Based User Authentication}
-%% GUIDE — STATUS: IMPLEMENTED
-%%  Source: source-code/services/auth-service/index.js
-%%          source-code/services/api-gateway/index.js
-%%
-%%  Flow:
-%%  1. Client sends POST /auth/login { username, password }.
-%%  2. Auth Service fetches bcrypt hash from PostgreSQL → compares with bcrypt.compare().
-%%  3. On success: issues:
-%%       accessToken  = jwt.sign({ username, role }, secret, { expiresIn: ... })
-%%       refreshToken = jwt.sign({ username, role }, secret, { expiresIn: ... })
-%%     Both signed with HMAC-SHA256 (HS256).
-%%  4. refreshToken is persisted in refresh_tokens table; enables server-side revocation.
-%%  5. Client attaches accessToken as "Authorization: Bearer <token>" on every request.
-%%  6. API Gateway verifies token on every non-public route using
-%%       jwt.verify(token, JWT_SECRET)
-%%     and rejects with 401 if missing, malformed, or expired.
-%%  7. Verified username and role are injected as x-username / x-role headers;
-%%     no downstream service re-verifies the token.
-%%
-%%  Token revocation (logout): DELETE from refresh_tokens WHERE token = $1.
-%%  This invalidates the refresh token; the short-lived access token is not
-%%  revocable by design (accepted trade-off in prototype).
+
+\textit{Status: Implemented.}
+
+Authentication flow: (1)~the client sends \texttt{POST /auth/login}; (2)~the Auth Service fetches the bcrypt hash from PostgreSQL and compares with \texttt{bcrypt.compare()}; (3)~on success it issues a short-lived \texttt{accessToken} and a long-lived \texttt{refreshToken}, both signed with HS256; (4)~the refresh token is persisted in \texttt{refresh\_tokens} for server-side revocation; (5)~the client attaches the access token as \texttt{Authorization: Bearer <token>} on every subsequent request; (6)~the API Gateway calls \texttt{jwt.verify(token, JWT\_SECRET)} and rejects non-public requests with HTTP~401 if the token is absent, malformed, or expired; (7)~verified \texttt{username} and \texttt{role} are injected as \texttt{x-username} / \texttt{x-role} headers so no downstream service re-verifies the token.
+
+Logout deletes the refresh token from the database, preventing its use for new access tokens. The short-lived access token is not revocable before expiry (accepted prototype trade-off).
 
 \begin{figure}[H]
     \centering
@@ -61,158 +35,118 @@
 \end{figure}
 
 \subsubsection{Role-Based Access Control (RBAC)}
-%% GUIDE — STATUS: PARTIALLY IMPLEMENTED
-%%  - Two roles defined: "client" and "driver" (enforced at signup).
-%%  - Role claim is embedded in the JWT and injected by the API Gateway as x-role.
-%%  - Delivery Service rejects POST /deliveries if x-role != "driver" (403).
-%%  - Production extension: fine-grained resource-level authorisation
-%%    (e.g. a client can only query their own orders; a driver only sees their manifest).
-%%    Currently enforced only via the x-username filter (CMS filters by clientId).
+
+\textit{Status: Partially implemented.}
+
+Two roles are defined: \texttt{client} and \texttt{driver}. The role is set at signup, embedded in the JWT, and injected by the gateway as \texttt{x-role}. The Delivery Service rejects \texttt{POST /deliveries} with HTTP~403 if the caller is not a \texttt{driver}. Order history queries are implicitly scoped by \texttt{clientId} (the CMS filters results by the \texttt{x-username} value). Fine-grained per-resource authorisation is a production extension.
 
 \subsubsection{Service-to-Service Trust}
-%% GUIDE — STATUS: IMPLEMENTED  (network-layer isolation; no mTLS)
-%%  - All inter-service traffic stays within the Docker "internal" bridge network.
-%%  - Services trust the x-username / x-role headers injected by the API Gateway.
-%%  - No service re-verifies the JWT; the gateway is the single enforcement point.
-%%  - Production improvement: mutual TLS (mTLS) via a service mesh (Istio/Linkerd)
-%%    to cryptographically authenticate each container-to-container call.
+
+\textit{Status: Implemented via network isolation; mTLS not implemented.}
+
+All inter-service traffic stays within the Docker \texttt{internal} bridge network. Services trust the \texttt{x-username} and \texttt{x-role} headers injected by the gateway; no downstream service calls \texttt{jwt.verify}. For production, mutual TLS via a service mesh (Istio or Linkerd) would cryptographically authenticate each container-to-container call, preventing an attacker who compromises the internal network from impersonating a service.
 
 \subsection{Data Protection}
 \label{subsec:encryption}
 
 \subsubsection{Password Storage}
-%% GUIDE — STATUS: IMPLEMENTED
-%%  Source: source-code/services/auth-service/index.js (bcrypt.hash / bcrypt.compare)
-%%  - bcryptjs used with cost factor 10 (≈100 ms hash time on a modern CPU).
-%%  - Passwords are never stored or logged in plain text.
-%%  - Adaptive work factor makes brute-force and rainbow-table attacks
-%%    computationally impractical even if the PostgreSQL database is compromised.
+
+\textit{Status: Implemented.}
+
+Passwords are hashed with \texttt{bcryptjs} at cost factor~10 before storage and are never logged. The adaptive work factor makes offline brute-force and rainbow-table attacks computationally impractical even if the database is exfiltrated.
 
 \subsubsection{Data in Transit}
-%% GUIDE — STATUS: DESIGNED, NOT IMPLEMENTED IN PROTOTYPE
-%%  - The prototype runs over plain HTTP/WS (no TLS).
-%%  - Design intention: TLS 1.2+ would be terminated at the API Gateway
-%%    (HTTPS for the REST API, WSS for the WebSocket channel).
-%%  - Communication with the third-party ROS API (external vendor) must use HTTPS;
-%%    in the prototype the ROS service is a local container so plain HTTP suffices.
-%%  - Internal Docker bridge communication does not require TLS because
-%%    it is isolated from external network interfaces.
+
+\textit{Status: Designed; not implemented in prototype.}
+
+The prototype uses plain HTTP and WS. Production requires TLS~1.2+ terminated at the API Gateway (HTTPS for REST, WSS for WebSocket). Communication with the external ROS API must use HTTPS with API key authentication. Internal Docker bridge traffic does not require TLS because it is isolated from external network interfaces.
 
 \subsubsection{Data at Rest}
-%% GUIDE — STATUS: DESIGNED, NOT IMPLEMENTED IN PROTOTYPE
-%%  - Sensitive data (user credentials, order details) stored in PostgreSQL.
-%%  - Production recommendation: PostgreSQL Transparent Data Encryption (TDE)
-%%    or filesystem-level encryption (e.g. LUKS) on the database volume.
-%%  - JWT secrets and database credentials stored as environment variables
-%%    in the prototype; production would use a dedicated secrets manager
-%%    (HashiCorp Vault, Kubernetes Secrets with encryption-at-rest, or AWS Secrets Manager).
+
+\textit{Status: Designed; not implemented in prototype.}
+
+Sensitive data (credentials, orders, notifications) is stored in PostgreSQL with no encryption at rest in the prototype. Production would require filesystem or volume encryption on the database. Secrets would be managed by a dedicated secrets manager with automatic rotation rather than plain environment variables.
 
 \subsection{API and Input Security}
 \label{subsec:api_security}
 
 \subsubsection{Injection Attack Prevention}
-%% GUIDE — STATUS: IMPLEMENTED (SQL); PARTIAL (general input)
-%%  - All PostgreSQL queries use parameterised statements via the pg client
-%%    (e.g. db.query('SELECT ... WHERE username = \$1', [username])).
-%%    This eliminates SQL injection regardless of input content.
-%%  - No general input sanitisation library is used in the prototype;
-%%    production should add schema validation (e.g. Joi, Zod) on all request bodies.
+
+\textit{Status: SQL injection --- implemented. General input validation --- not implemented.}
+
+All PostgreSQL queries use parameterised statements via the \texttt{pg} client (e.g.\ \texttt{db.query('SELECT ... WHERE username = \$1', [username])}), eliminating SQL injection regardless of input content. No general input validation library is used; production should add request-body schema validation on all service endpoints.
 
 \subsubsection{API Gateway Security Controls}
-%% GUIDE — STATUS: IMPLEMENTED (auth); NOT IMPLEMENTED (rate limiting, CORS)
-%%  - Authentication enforcement: validateToken() rejects all non-public requests
-%%    without a valid JWT before any processing occurs.
-%%  - Public prefixes bypassing auth: /auth/ (login/signup) and /health only.
-%%  - Rate limiting: not implemented in prototype; production needs request throttling
-%%    to prevent credential stuffing and DoS at the /auth/login endpoint.
-%%  - CORS headers: not configured in the prototype; a real browser SPA would require
-%%    Access-Control-Allow-Origin set appropriately on the API Gateway responses.
+
+\textit{Authentication --- implemented. Rate limiting and CORS --- not implemented.}
+
+The gateway validates the JWT before any request reaches an internal service. Only \texttt{/auth/} and \texttt{/health} routes bypass authentication (\texttt{publicPrefixes} in \texttt{config.js}). Rate limiting is not configured; production requires throttling on \texttt{/auth/login} to prevent credential-stuffing. CORS headers are not set; a browser SPA would require \texttt{Access-Control-Allow-Origin} configured on the gateway.
 
 \subsection{Network Security}
 \label{subsec:network_security}
 
 \subsubsection{Container Network Isolation}
-%% GUIDE — STATUS: IMPLEMENTED
-%%  Source: docker-compose.yml (networks section)
-%%  - All 13 containers share a single private Docker bridge network "internal".
-%%  - Only two ports are forwarded to the host machine:
-%%      · 8081 → API Gateway (the sole external entry point)
-%%      · 15672 → RabbitMQ management UI (development convenience only;
-%%                should be disabled or firewall-protected in production)
-%%  - Internal services (auth, order, cms, wms, etc.) are completely invisible
-%%    to external network interfaces; attackers cannot bypass the API Gateway.
+
+\textit{Status: Implemented.}
+
+All thirteen containers share a single private Docker bridge network named \texttt{internal}. Only two ports are forwarded to the host: \texttt{8081} (API Gateway) and \texttt{15672} (RabbitMQ management UI, development only). No internal service port is reachable from outside the Docker host, so an attacker on the public internet cannot contact internal services directly.
 
 \subsubsection{Production Network Architecture}
-%% GUIDE — DESIGNED, NOT IMPLEMENTED
-%%  - Recommend placing the API Gateway behind a cloud load balancer / WAF
-%%    (e.g. AWS ALB + WAF, Nginx with ModSecurity) for DDoS protection and
-%%    web application firewall rules.
-%%  - RabbitMQ and PostgreSQL should be on a separate private subnet with
-%%    no inbound rules from the public internet.
+
+\textit{Status: Designed; not implemented.}
+
+Production would place the API Gateway behind a cloud load balancer and WAF for DDoS protection and application-layer filtering. RabbitMQ and PostgreSQL would reside on a separate private subnet inaccessible from the public internet.
 
 \subsection{Secrets Management}
 \label{subsec:secrets}
 
-%% GUIDE — STATUS: BASIC (environment variables); PRODUCTION IMPROVEMENT NEEDED
-%%  Prototype:
-%%  - JWT_SECRET and database credentials are injected as Docker environment
-%%    variables (docker-compose.yml + .env file).
-%%  - Default to development values if not overridden (intentionally weak defaults
-%%    that must be changed before any production deployment).
-%%  Production:
-%%  - Use Kubernetes Secrets with etcd encryption-at-rest, or HashiCorp Vault
-%%    with dynamic credential rotation.
-%%  - JWT_SECRET should be rotated periodically; rotation requires updating both
-%%    Auth Service and API Gateway simultaneously.
-%%  - Database passwords should be different per service and rotated automatically.
+\textit{Status: Basic (environment variables); production improvement required.}
+
+\texttt{JWT\_SECRET} and database credentials are injected as Docker environment variables. They default to development values if no \texttt{.env} file is present; these defaults must never be used in production. Production requires a secrets manager with automatic rotation. \texttt{JWT\_SECRET} rotation requires updating both the Auth Service and API Gateway simultaneously.
 
 \subsection{Third-Party Integration Security}
 \label{subsec:third_party_security}
 
-%% GUIDE:
-%%  - The ROS (Route Optimisation System) is an external vendor API.
-%%  - In production: all calls to the ROS REST API must use HTTPS and
-%%    include an API key or OAuth 2.0 Client Credentials token.
-%%  - The API key should be stored in a secrets manager and rotated quarterly.
-%%  - ROS responses should be validated against a schema before processing
-%%    (to prevent injection via manipulated vendor responses).
-%%  - Rate limit outbound calls to the ROS to respect vendor SLA constraints.
+The ROS API is an external vendor endpoint. In production, all calls to it must use HTTPS with an API key or OAuth~2.0 Client Credentials token, stored in a secrets manager and rotated quarterly. ROS responses should be validated against a schema before use. Outbound call rates should be limited to respect vendor SLA constraints.
 
 \subsection{Logging and Audit}
 \label{subsec:security_monitoring}
 
-%% GUIDE — STATUS: MINIMAL (console logging); PRODUCTION IMPROVEMENT NEEDED
-%%  - All services log requests and key events to stdout (captured by Docker).
-%%  - Auth Service logs all signup, login, refresh, and logout attempts with outcome.
-%%  - API Gateway logs every inbound request with method, URL, and target service.
-%%  - Production: centralise logs with an ELK stack (Elasticsearch + Logstash + Kibana)
-%%    or a cloud-native solution (CloudWatch, Datadog); set up alerts on:
-%%    · Repeated 401 failures (credential stuffing attempt)
-%%    · High message-failure rates on RabbitMQ dead letter channels
-%%    · Unexpected 5xx rates from any service
+\textit{Status: Minimal (stdout); centralised logging not implemented.}
+
+All services write structured logs to stdout, captured by Docker. The Auth Service logs every authentication event and its outcome. The API Gateway logs every inbound request with method, URL, and target service. Production would require centralised log aggregation with automated alerts on repeated HTTP~401 failures and elevated error rates.
 
 \subsection{Security in the Prototype vs Production}
 \label{subsec:security_prototype}
 
-%% GUIDE: a concise comparison table or bullet list distinguishing what is
-%%   implemented in the prototype versus what is required for production.
-%%   Categories: authentication, encryption, network, input validation,
-%%   secrets management, monitoring.
-%%
-%%  IMPLEMENTED IN PROTOTYPE:
-%%   - JWT HS256 authentication at the API Gateway.
-%%   - bcrypt password hashing (cost 10).
-%%   - Docker network isolation (no internal port exposure).
-%%   - Parameterised SQL queries (SQL injection prevention).
-%%   - x-username / x-role header injection (no downstream token re-verification).
-%%   - Server-side refresh token revocation on logout.
-%%
-%%  PRODUCTION ADDITIONS REQUIRED:
-%%   - TLS 1.2+ (HTTPS/WSS) end-to-end.
-%%   - Rate limiting and WAF at the API Gateway.
-%%   - mTLS between internal services (service mesh).
-%%   - Secrets manager (Vault / K8s Secrets).
-%%   - CORS policy configuration.
-%%   - Input schema validation on all request bodies.
-%%   - Centralised logging and security alerting.
-%%   - PostgreSQL encryption at rest.
+\begin{table}[H]
+    \centering
+    \caption{Security Controls: Prototype vs Production}
+    \label{tab:security_comparison}
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{|p{3.8cm}|p{4.5cm}|p{5.2cm}|}
+        \hline
+        \textbf{Control} & \textbf{Prototype} & \textbf{Production requirement} \\
+        \hline
+        Authentication & JWT HS256 at API Gateway & Same + access-token rotation \\
+        \hline
+        Password storage & bcrypt cost~10 & Same \\
+        \hline
+        Transport security & Plain HTTP/WS & TLS~1.2+ (HTTPS/WSS) end-to-end \\
+        \hline
+        Network isolation & Docker bridge only & Private subnet + WAF + cloud LB \\
+        \hline
+        Service-to-service auth & Header trust (network isolation) & mTLS via service mesh \\
+        \hline
+        SQL injection & Parameterised queries & Same \\
+        \hline
+        Input validation & None & Schema validation on all endpoints \\
+        \hline
+        Secrets management & Environment variables & Secrets manager with rotation \\
+        \hline
+        Rate limiting & Not implemented & Throttling on all public endpoints \\
+        \hline
+        Logging and alerting & Console stdout & Centralised logs + automated alerts \\
+        \hline
+    \end{tabular}
+\end{table}

@@ -1,11 +1,3 @@
-%% ╔══════════════════════════════════════════════════════════════════════════╗
-%% ║  SECTION STATUS: MOSTLY COMPLETE                                       ║
-%% ║  All subsections are written and accurate. One fix applied below:       ║
-%% ║  "RMS Service" renamed to "ROS Service" to match the assignment spec    ║
-%% ║  and source code (ros-service / ROSAdapter). The Table 2 summary and    ║
-%% ║  technology criteria table (Table 3) are both complete.                 ║
-%% ╚══════════════════════════════════════════════════════════════════════════╝
-
 \section{Technology Stack}
 \label{sec:technology}
 
@@ -91,7 +83,7 @@ The three legacy system adapters are the core integration components of the plat
 The CMS Adapter uses the \textbf{soap} npm package (v0.44) to communicate with the legacy Client Management System. The \texttt{soap} library parses the CMS WSDL definition at startup and generates a typed service client, allowing the adapter to invoke remote operations (\texttt{CreateOrder}, \texttt{UpdateOrderStatus}, \texttt{GetOrdersByUser}) as idiomatic JavaScript async function calls. The library handles all SOAP envelope construction, XML serialisation, and response deserialisation transparently, eliminating the need for manual XML manipulation.
 
 \paragraph{ROS Adapter (REST/JSON)}
-The ROS Adapter uses \textbf{axios} to make HTTP POST requests to the Route Optimisation System's REST API. Axios was selected over the native \texttt{fetch} API for its automatic JSON serialisation/deserialisation, configurable timeout support, and consistent error handling across network and HTTP-level failures. The adapter subscribes to the \texttt{rms.route.optimize} routing key, calls the ROS \texttt{/api/ros/optimize-route} endpoint, and publishes the result back on the \texttt{rms.reply} key with the original \texttt{correlationId} so the caller can match the asynchronous response.
+The ROS Adapter uses \textbf{axios} to make HTTP POST requests to the Route Optimisation System's REST API. Axios was selected over the native \texttt{fetch} API for its automatic JSON serialisation/deserialisation, configurable timeout support, and consistent error handling across network and HTTP-level failures. The adapter subscribes to the \texttt{ros.route.optimize} routing key, calls the ROS \texttt{/api/ros/optimize-route} endpoint, and publishes the result back on the \texttt{ros.reply} key with the original \texttt{correlationId} so the caller can match the asynchronous response.
 
 \paragraph{WMS Adapter (Proprietary HTTP over TCP/IP)}
 The WMS Adapter also uses \textbf{axios} to call the Warehouse Management System's internal HTTP REST interface, which simulates the proprietary TCP/IP protocol described in the scenario. The adapter handles three operations: fetching available stock items (\texttt{wms.items.request}), reserving stock for a confirmed order (\texttt{order.confirmed}), and releasing a reservation on payment failure (\texttt{wms.order.release}). Results are published back on dedicated reply routing keys, allowing the rest of the platform to react asynchronously.
@@ -150,7 +142,7 @@ Containerisation provides the following benefits for this project:
 
 \subsubsection{Docker Compose}
 
-\textbf{Docker Compose v2} orchestrates the entire multi-container platform for the prototype. The \texttt{docker-compose.yml} file defines all eleven services (RabbitMQ, PostgreSQL, API Gateway, Auth, Order, Items, Payment, Notify, CMS, RMS, WMS), their build contexts, environment variables, dependency ordering, health checks, and port mappings.
+\textbf{Docker Compose v2} orchestrates the entire multi-container platform for the prototype. The \texttt{docker-compose.yml} file defines all thirteen services (RabbitMQ, PostgreSQL, API Gateway, Auth, Order, Items, Payment, Notify, Delivery, Route, CMS, ROS, WMS), their build contexts, environment variables, dependency ordering, health checks, and port mappings.
 
 Key infrastructure decisions encoded in the Compose file include:
 

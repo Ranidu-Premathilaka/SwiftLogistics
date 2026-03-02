@@ -1,110 +1,96 @@
-%% ╔══════════════════════════════════════════════════════════════════════════╗
-%% ║  SECTION STATUS: SKELETON — ALL SUBSECTIONS NEED CONTENT              ║
-%% ║  Maps to assignment §5.1.d: "minimal implementation that mocks the    ║
-%% ║  functionalities of CMS, ROS, and WMS … demonstrate a basic order     ║
-%% ║  submission flow … real-time tracking architecturally described."      ║
-%% ╚══════════════════════════════════════════════════════════════════════════╝
-
 \section{Prototype Implementation}
 \label{sec:prototype}
 
-%% GUIDE: 1-2 sentence intro stating the prototype demonstrates the described
-%%   architecture using fully open-source, containerised Node.js services.
+The prototype demonstrates the described architecture using fully open-source, containerised Node.js services. All core flows—order creation, delivery assignment, real-time WebSocket notifications—are operational. No client UI is implemented; all interaction is through the integration test suite or HTTP tools.
 
 \subsection{Prototype Scope}
 \label{subsec:prototype_scope}
 
-%% GUIDE — What IS implemented (bullet list):
-%%  - Mock CMS: Node.js SOAP server (CreateOrder, UpdateOrderStatus,
-%%    GetOrdersByUser, GetNextPendingDelivery) backed by PostgreSQL.
-%%  - Mock ROS: Express REST server at /api/ros/optimize-route (dummy ordered sequence).
-%%  - Mock WMS: Express REST server (/api/wms/items, /reserve, /release,
-%%    /delivery-status) with in-memory inventory.
-%%  - API Gateway: JWT auth + http-proxy routing (port 8081).
-%%  - Auth, Order, Items, Delivery, Payment, Route, Notify services — all operational.
-%%  - Full Docker Compose orchestration: 13 containers, auto-start ordering,
-%%    health checks, restart policies (docker-compose.yml).
-%%  - Integration test suite: source-code/tests/ (7 test files + helpers).
-%%
-%% GUIDE — What is NOT implemented (state clearly):
-%%  - No web/mobile client UI (interaction via HTTP tools or test suite only).
-%%  - No TLS (prototype uses plain HTTP/WS).
-%%  - In-memory WMS inventory (resets on container restart).
-%%  - Dead Letter Channel and retry logic not implemented.
-%%  - Real-time UI screenshots cannot be provided (no browser client).
+\textbf{Implemented:}
+\begin{itemize}
+    \item Mock CMS: Node.js SOAP server (\texttt{CreateOrder}, \texttt{UpdateOrderStatus}, \texttt{GetOrdersByUser}, \texttt{GetNextPendingDelivery}) backed by PostgreSQL.
+    \item Mock ROS: Express REST server at \texttt{/api/ros/optimize-route} returning a dummy optimised sequence.
+    \item Mock WMS: Express REST server with in-memory inventory (\texttt{/api/wms/items}, \texttt{/reserve}, \texttt{/release}, \texttt{/delivery-status}).
+    \item API Gateway with JWT authentication and routing on host port~8081.
+    \item Auth, Order, Items, Delivery, Payment, Route, and Notify services --- all operational.
+    \item Docker Compose orchestration: 13 containers with health-check start ordering and \texttt{restart: unless-stopped}.
+    \item Integration test suite: seven test files covering all core flows.
+\end{itemize}
+
+\textbf{Not implemented:}
+\begin{itemize}
+    \item No web or mobile client UI; interaction is via HTTP tools or the test suite only.
+    \item No TLS; the prototype uses plain HTTP and WS.
+    \item WMS inventory is in-memory and resets on container restart.
+    \item Dead Letter Channel and message retry logic.
+\end{itemize}
 
 \subsection{Mock System Implementations}
 \label{subsec:mock_systems}
 
 \subsubsection{Mock Client Management System (CMS)}
-% SOAP service mock implementation
-% Endpoints provided
-% Sample XML request/response formats
 
-\begin{lstlisting}[language=XML, caption=Sample CMS SOAP Request]
-<?xml version="1.0"?>
-<!-- Sample SOAP request to CMS -->
+The mock CMS is a Node.js SOAP server defined by \texttt{cms.wsdl} and implemented in \texttt{cms-service/index.js}. It persists order data in PostgreSQL using the schema in \texttt{source-code/db/cms.sql}. The CMS Adapter (\texttt{cms-adapter/index.js}) creates a typed client from the WSDL at startup using the \texttt{soap} library and calls the server at \texttt{127.0.0.1:3000} within the same container.
+
+\begin{lstlisting}[language=XML, caption=Sample SOAP CreateOrder Request]
+<?xml version="1.0" encoding="utf-8"?>
+<soapenv:Envelope
+  xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+  xmlns:cms="http://cms.swiftlogistics.com/wsdl">
+  <soapenv:Body>
+    <cms:CreateOrder>
+      <clientId>user123</clientId>
+      <itemList>[{"id":"SKU-001","qty":2}]</itemList>
+      <destination>42 Galle Road, Colombo 03</destination>
+    </cms:CreateOrder>
+  </soapenv:Body>
+</soapenv:Envelope>
 </lstlisting>
 
 \subsubsection{Mock Route Optimization System (ROS)}
-% REST service mock implementation
-% API endpoints
-% Sample JSON request/response
 
-\begin{lstlisting}[language=JSON, caption=Sample ROS REST Request]
+The mock ROS is an Express server implemented in \texttt{ros-service/index.js}. It exposes one endpoint: \texttt{POST /api/ros/optimize-route}. It accepts an array of delivery locations and returns them in a dummy optimised order (reverse of input in the prototype). The ROS Adapter (\texttt{ros-adapter/index.js}) calls this endpoint via \texttt{axios} in response to \texttt{ros.delivery.optimize} events.
+
+\begin{lstlisting}[language=JSON, caption=Sample ROS Optimize-Route Request and Response]
+// POST /api/ros/optimize-route
+// Request
 {
-  "deliveries": [
-    {
-      "address": "123 Main St, Colombo",
-      "priority": "high"
-    }
+  "correlationId": "req-abc123",
+  "locations": [
+    "42 Galle Road, Colombo 03",
+    "15 Union Place, Colombo 02",
+    "7 Duplication Road, Colombo 04"
+  ]
+}
+// Response
+{
+  "optimizedRoute": [
+    "7 Duplication Road, Colombo 04",
+    "15 Union Place, Colombo 02",
+    "42 Galle Road, Colombo 03"
   ]
 }
 \end{lstlisting}
 
 \subsubsection{Mock Warehouse Management System (WMS)}
-% TCP/IP server mock implementation
-% Protocol specification
-% Message format
+
+The mock WMS is an Express server implemented in \texttt{wms-service/index.js} with an in-memory inventory array. It exposes five endpoints: \texttt{GET /api/wms/items} (list stock), \texttt{POST /api/wms/reserve} (reserve items for an order), \texttt{POST /api/wms/release} (release a reservation on payment failure), \texttt{PATCH /api/wms/delivery-status} (update delivery state), and \texttt{GET /api/wms/delivery-status} (query delivery state). The WMS Adapter (\texttt{wms-adapter/index.js}) calls these endpoints via \texttt{axios}, simulating the proprietary TCP/IP protocol boundary as intra-container HTTP.
 
 \subsection{Core Functionality Demonstration}
 \label{subsec:core_functionality}
 
 \subsubsection{Order Submission Flow}
-%% GUIDE: describe the 6-stage flow (matching test-order-workflow.js):
-%%
-%%  Stage 1 — Authentication
-%%    POST /auth/signup + POST /auth/login
-%%    Receive { accessToken, refreshToken }; open WebSocket to /notify.
-%%
-%%  Stage 2 — Browse Inventory
-%%    GET /items  → Items Service → wms.items.request → WMS Adapter
-%%    → wms.items.response → Notify Service → WebSocket { event: items_response }
-%%
-%%  Stage 3 — Create Order
-%%    POST /order { itemList, destination } (x-request-id header as idempotency key)
-%%    → cms.order.create → CMS Adapter (SOAP CreateOrder) → order.created
-%%    → Payment Service creates payment intent
-%%    → notify.order.payment_intent_created → client receives { orderId, clientSecret }
-%%
-%%  Stage 4 — Confirm Order
-%%    PATCH /order { orderId, status: "order_confirmed", data: { paymentToken } }
-%%    → cms.order.update_status → CMS Adapter (SOAP UpdateOrderStatus)
-%%    → order.status_updated → order.confirmed → WMS Adapter (SOAP reserve)
-%%    → order.wms.reserved → payment.charge → Payment Service charges
-%%    → order.payment.completed → notify.order.payment_completed → client
-%%    (Compensation path: payment.failed → wms.order.release → WMS releases stock)
-%%
-%%  Stage 5 — Driver Delivery Cycle
-%%    POST /deliveries { count: N } (driver JWT)
-%%    → CMS GetNextPendingDelivery → ROS optimize-route
-%%    → driver receives route via WebSocket
-%%    PATCH /deliveries { orderId, deliveryStatus: "delivered" }
-%%    → WMS delivery-status update → client notified
-%%
-%%  Stage 6 — View Orders
-%%    GET /order → cms.orders.requested → CMS GetOrdersByUser
-%%    → order.cms.order_response → notify.client.order_query_response → client
+
+The six-stage flow, demonstrated end-to-end by \texttt{test-order-workflow.js}:
+
+\begin{enumerate}
+    \item \textbf{Authentication.} \texttt{POST /auth/signup} then \texttt{POST /auth/login} → receive \texttt{\{accessToken, refreshToken\}}. Open WebSocket to \texttt{ws://gateway:8081/notify} with the access token.
+    \item \textbf{Browse Inventory.} \texttt{GET /items} → Items Service publishes \texttt{wms.items.request} → WMS Adapter calls mock WMS → publishes \texttt{wms.items.response} → Notify Service pushes \texttt{\{event: items\_response, items: [...]\}} over WebSocket.
+    \item \textbf{Create Order.} \texttt{POST /order \{itemList, destination\}} with \texttt{x-request-id} header → Order Service publishes \texttt{cms.order.create} → CMS Adapter creates order via SOAP → publishes \texttt{order.created} → Payment Service creates payment intent → WebSocket delivers \texttt{\{event: payment\_intent\_created, orderId, clientSecret\}}.
+    \item \textbf{Confirm Order.} \texttt{PATCH /order \{orderId, status: ``order\_confirmed'', paymentToken\}} → CMS updates status → \texttt{order.confirmed} → WMS Adapter reserves stock → \texttt{order.wms.reserved} → Payment Service charges → WebSocket delivers \texttt{\{event: payment\_completed\}} or \texttt{\{event: payment\_failed\}}. On failure: WMS Adapter releases the reservation (saga compensation).
+    \item \textbf{Driver Delivery Cycle.} \texttt{POST /deliveries \{count: N\}} (driver JWT) → CMS returns next pending orders → Route Service requests ROS optimisation → driver receives route via WebSocket. \texttt{PATCH /deliveries \{orderId, deliveryStatus: ``delivered''\}} → WMS updated → client notified.
+    \item \textbf{View Orders.} \texttt{GET /order} → Order Service publishes \texttt{cms.orders.requested} → CMS returns orders for the client → WebSocket delivers \texttt{\{event: order\_query\_response, orders: [...]\}}.
+\end{enumerate}
 
 \begin{figure}[H]
     \centering
@@ -114,26 +100,12 @@
 \end{figure}
 
 \subsubsection{Service Orchestration}
-%% GUIDE:
-%%  - State explicitly: choreography-based (no central orchestrator).
-%%  - PubSub utility (utility/pubsub.js) provides auto-reconnect, manual ack,
-%%    and subscriber restoration on reconnect.
-%%  - POST /order returns HTTP 200 with "Order creation initiated" immediately;
-%%    orderId and clientSecret arrive seconds later via WebSocket.
-%%    This demonstrates the non-blocking asynchronous processing model.
+
+All services operate via choreography; there is no central orchestrator. The PubSub utility (\texttt{utility/pubsub.js}) provides auto-reconnect with a five-second back-off, manual consumer ACK, and automatic subscriber re-registration on reconnect. \texttt{POST /order} returns HTTP~200 with \texttt{"Order creation initiated"} immediately; the \texttt{orderId} and payment intent arrive seconds later via WebSocket. This demonstrates the non-blocking processing model in practice.
 
 \subsubsection{Real-time Updates}
-%% GUIDE:
-%%  - No browser UI implemented; real-time delivery verified via NotificationCollector
-%%    class in the test suite (test-order-workflow.js ~line 50).
-%%  - Describe the WebSocket protocol a real client would use:
-%%      Connect: ws://gateway:8081/notify  (Authorization: Bearer <token>)
-%%      Receive: { persist: 0|1, payload: { event, ...data } } JSON frames.
-%%      Events: payment_intent_created, payment_completed, payment_failed,
-%%              items_response, order_query_response,
-%%              delivery_route_assigned (driver), delivery_update (client).
-%%  - Offline persistence: disconnect + reconnect flushes pending_notifications
-%%    rows in timestamp order (notify-service/index.js handleNotification()).
+
+No browser UI exists; real-time delivery is verified in the test suite via the \texttt{NotificationCollector} class in \texttt{test-order-workflow.js}, which listens on a WebSocket connection and collects arriving frames. A real client would connect with \texttt{Authorization: Bearer <token>} and receive JSON frames of the form \texttt{\{persist: 0{|}1, payload: \{event, ...data\}\}}. Supported events include \texttt{payment\_intent\_created}, \texttt{payment\_completed}, \texttt{payment\_failed}, \texttt{items\_response}, \texttt{order\_query\_response}, \texttt{delivery\_route\_assigned} (driver), and \texttt{delivery\_update} (client). When a user reconnects after being offline, the Notify Service flushes any queued \texttt{pending\_notifications} rows in timestamp order.
 
 \begin{figure}[H]
     \centering
@@ -146,18 +118,17 @@
 \label{subsec:realtime_tracking}
 
 \subsubsection{Architectural Description}
-%% GUIDE (full pipeline):
-%%  1. Any service publishes  notify.<userId>.<event>  to "swift_logistics" exchange.
-%%  2. Notify Service (unique per-instance queue: notifier.\${HOSTNAME})
-%%     receives ALL notify.* events.
-%%  3. Looks up the userId in its in-process Map<userId, Set<WebSocket>>.
-%%  4. Online user: sends JSON frame to all connected sockets for that userId.
-%%  5. Offline + persist=1: inserts into pending_notifications (PostgreSQL).
-%%  6. On next WebSocket connect: flushes pending rows in timestamp order.
-%%  Horizontal scaling: each instance has its own unique queue -- RabbitMQ
-%%  delivers each notify.* event to EVERY Notify Service instance (fanout);
-%%  each instance serves only its own connected users.
-%%  Source: source-code/services/notify-service/index.js
+
+The real-time notification pipeline operates as follows:
+\begin{enumerate}
+    \item Any service publishes \texttt{notify.<userId>.<event>} to the \texttt{swift\_logistics} exchange.
+    \item The Notify Service receives the event on its unique per-instance queue (\texttt{notifier.\$\{HOSTNAME\}}).
+    \item It looks up the \texttt{userId} in its in-process \texttt{Map<userId, Set<WebSocket>>}.
+    \item If the user is connected, it sends a JSON frame to all active sockets for that user.
+    \item If the user is offline and \texttt{persist=1}, it inserts a row into \texttt{pending\_notifications} (PostgreSQL). On the next WebSocket connection the row is flushed in timestamp order and deleted.
+\end{enumerate}
+
+Horizontal scaling is built into the design: each Notify Service instance has its own unique queue so RabbitMQ delivers every \texttt{notify.*} event to every instance. Each instance independently serves its own connected users.
 
 \begin{figure}[H]
     \centering
@@ -167,21 +138,24 @@
 \end{figure}
 
 \subsubsection{Minimal Implementation}
-%% GUIDE — what IS working in the prototype:
-%%  - Full WebSocket server (ws@8.x) running in Notify Service.
-%%  - Offline notification persistence and flush-on-reconnect implemented
-%%    (pending_notifications table, notify.sql).
-%%  - Route assignments pushed to drivers via WebSocket (Delivery workflow).
-%%  - Delivery-complete events notify the order-owning client via WebSocket.
-%%
-%% GUIDE — what is NOT in the prototype (architecturally described only):
-%%  - Mobile push notifications (FCM/APNS) for background driver alerts.
-%%  - GPS-based real-time location streaming.
-%%  - TLS/WSS not configured (prototype is HTTP/WS only).
+
+\textbf{Implemented and working:}
+\begin{itemize}
+    \item Full WebSocket server (\texttt{ws} library) in the Notify Service.
+    \item Offline notification persistence (\texttt{pending\_notifications} table) and flush-on-reconnect.
+    \item Route assignments pushed to drivers via WebSocket during the delivery workflow.
+    \item Delivery-complete events notifying the order-owning client via WebSocket.
+\end{itemize}
+
+\textbf{Architecturally described but not in prototype:}
+\begin{itemize}
+    \item Mobile push notifications (FCM/APNS) for background driver alerts.
+    \item GPS-based real-time driver location streaming.
+    \item TLS/WSS (prototype uses plain HTTP/WS).
+\end{itemize}
 
 \subsection{Code Structure}
 \label{subsec:code_structure}
-%% GUIDE: replace placeholder with actual structure below.
 
 \begin{lstlisting}[caption=Actual Project Directory Structure]
 source-code/
@@ -245,35 +219,23 @@ docker compose down
 
 \subsection{Testing the Prototype}
 \label{subsec:testing}
-%% GUIDE — describe the test suite (source-code/tests/):
-%%  - test-all.js       : runs all test files sequentially; exits non-zero on failure.
-%%  - test-auth.js      : signup, login, refresh, logout + token expiry.
-%%  - test-order-workflow.js : full flow: browse items, create order, receive payment
-%%    intent via WebSocket, confirm order, receive payment result via WebSocket.
-%%  - test-delivery-workflow.js : driver requests delivery manifest + route.
-%%  - test-delivery-complete.js : driver marks delivery done; asserts client notified.
-%%  - test-delivery-status.js  : GET delivery status for an order.
-%%  - test-view-orders.js      : client queries order history via WebSocket.
-%%  - No test framework: lightweight helpers.js provides HTTP request utility
-%%    and a simple pass/fail assertion runner with coloured console output.
-%%  - Each test creates a unique username (e.g. order\_test\_\textit{timestamp})
-%%    to avoid state collisions on consecutive runs.
+
+The test suite in \texttt{source-code/tests/} contains seven files. \texttt{test-all.js} runs all files sequentially and exits non-zero on the first failure. Individual files exercise specific flows: \texttt{test-auth.js} (signup, login, refresh, logout); \texttt{test-order-workflow.js} (full order lifecycle including WebSocket notifications); \texttt{test-delivery-workflow.js} (driver requests manifest and route); \texttt{test-delivery-complete.js} (driver marks delivery done, client notified); \texttt{test-delivery-status.js} (query delivery status); \texttt{test-view-orders.js} (client queries order history). No test framework is used; \texttt{helpers.js} provides a lightweight HTTP request utility and a pass/fail assertion runner with coloured console output. Each test creates a unique username (e.g.\ \texttt{order\_test\_<timestamp>}) to avoid state collisions on consecutive runs.
 
 \subsection{Limitations and Future Work}
 \label{subsec:limitations}
-%% GUIDE — current prototype limitations (bullet list):
-%%  - No client-facing UI; interaction via test suite or HTTP tools only.
-%%  - No TLS: all traffic is plain HTTP/WS.
-%%  - Dead Letter Channel not implemented; failed AMQP messages are logged and dropped.
-%%  - WMS inventory is in-memory (resets on container restart).
-%%  - Payment processor is simulated (dummy ~90\% success rate).
-%%  - Single PostgreSQL instance (acceptable for prototype; production needs isolation).
-%%  - JWT\_SECRET shared via env var; no automated secret rotation.
-%%  - No rate limiting or request throttling.
-%%
-%% GUIDE — future enhancements (reference \S\ref{subsec:future_work}):
-%%  - Dead Letter Exchange + configurable retry policies.
-%%  - TLS termination at the API Gateway.
-%%  - Real payment processor integration (Stripe / PayHere).
-%%  - SwiftTrack web portal and driver mobile application.
-%%  - Kubernetes deployment with HPA on Order, Notify, and Delivery services.
+
+Current prototype limitations:
+\begin{itemize}
+    \item No client-facing UI; interaction is via the test suite or HTTP tools only.
+    \item No TLS; all traffic is plain HTTP/WS.
+    \item Dead Letter Channel not implemented; failed AMQP messages are logged and dropped.
+    \item WMS inventory is in-memory and resets on container restart.
+    \item Payment processor is simulated with a dummy $\approx$90\% success rate.
+    \item Single PostgreSQL instance shared by all services.
+    \item \texttt{JWT\_SECRET} is an environment variable with no rotation mechanism.
+    \item No rate limiting or request throttling.
+    \item Saga state (\texttt{pendingPayments} Map) is in-memory and lost on Order Service restart.
+\end{itemize}
+
+Future enhancements are detailed in Section~\ref{subsec:future_work}.
