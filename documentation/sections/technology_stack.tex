@@ -1,3 +1,11 @@
+%% ╔══════════════════════════════════════════════════════════════════════════╗
+%% ║  SECTION STATUS: MOSTLY COMPLETE                                       ║
+%% ║  All subsections are written and accurate. One fix applied below:       ║
+%% ║  "RMS Service" renamed to "ROS Service" to match the assignment spec    ║
+%% ║  and source code (ros-service / ROSAdapter). The Table 2 summary and    ║
+%% ║  technology criteria table (Table 3) are both complete.                 ║
+%% ╚══════════════════════════════════════════════════════════════════════════╝
+
 \section{Technology Stack}
 \label{sec:technology}
 
@@ -71,7 +79,7 @@ The gateway is the only service that exposes a port to the host machine (port \t
 
 Services that expose synchronous HTTP endpoints—the \textbf{Auth Service}, \textbf{Order Service}, and \textbf{Items Service}—use \textbf{Express.js 4}. Express was chosen for its minimal footprint, mature middleware ecosystem, and widespread familiarity among Node.js developers. It provides clean routing, request body parsing, and straightforward error handling without imposing a heavyweight framework structure.
 
-Services that operate purely as event consumers and publishers—the \textbf{Payment Service}, \textbf{CMS Service}, \textbf{RMS Service}, and \textbf{WMS Service}—do not run an HTTP server at all. They use only the \textbf{amqplib} AMQP client to subscribe to RabbitMQ routing keys and publish results, keeping their resource footprint minimal.
+Services that operate purely as event consumers and publishers—the \textbf{Payment Service}, \textbf{CMS Service}, \textbf{ROS Service}, and \textbf{WMS Service}—do not run an HTTP server at all. They use only the \textbf{amqplib} AMQP client to subscribe to RabbitMQ routing keys and publish results, keeping their resource footprint minimal.
 
 The \textbf{Notification Service} uses Node.js's built-in \texttt{http} module alongside the \textbf{ws} library to run a combined HTTP health-check endpoint and a WebSocket server on the same port.
 

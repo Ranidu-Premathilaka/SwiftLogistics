@@ -1,16 +1,33 @@
+%% ╔══════════════════════════════════════════════════════════════════════════╗
+%% ║  SECTION STATUS: SKELETON — ALL SUBSECTIONS NEED CONTENT              ║
+%% ║  Maps to assignment §5.1.c: "describe the architectural and            ║
+%% ║  integration patterns used … rationale for selecting them."            ║
+%% ║  Only include patterns actually present in the source code (see notes  ║
+%% ║  per subsection). Remove or merge any subsection not applicable.       ║
+%% ╚══════════════════════════════════════════════════════════════════════════╝
+
 \section{Architectural and Integration Patterns}
 \label{sec:patterns}
 
-% Description of patterns used in the solution
+%% GUIDE: opening paragraph — state that the solution combines five architectural
+%%   patterns and six enterprise integration patterns. The combination is what
+%%   enables the system to simultaneously satisfy heterogeneous integration,
+%%   high-volume async processing, real-time notifications, and resilience.
 
 \subsection{Architectural Patterns}
 \label{subsec:arch_patterns}
-% Main architectural patterns employed
 
 \subsubsection{Microservices Architecture}
-% Description of microservices pattern
-% How it's applied in SwiftLogistics
-% Benefits for scalability and maintainability
+%% GUIDE — STATUS: IMPLEMENTED
+%%  - Describe: each business capability is a separately deployable unit.
+%%  - In SwiftLogistics: 13 containers each with a single responsibility.
+%%    Group them by role: client-facing (Auth, Order, Items, Delivery, Notify),
+%%    backend-processing (Payment, Route), integration adapters (CMS, ROS, WMS),
+%%    infrastructure (RabbitMQ, PostgreSQL).
+%%  - Benefits here: CMS adapter can be redeployed when the SOAP contract
+%%    changes without touching Order Service; Notify Service can be scaled
+%%    out without scaling Payment Service.
+%%  - Source reference: docker-compose.yml, each services/ sub-directory.
 
 \begin{figure}[H]
     \centering
@@ -20,10 +37,21 @@
 \end{figure}
 
 \subsubsection{Event-Driven Architecture}
-% Description of event-driven pattern
-% Event sourcing and CQRS if applicable
-% How events flow through the system
-% Benefits for real-time updates
+%% GUIDE — STATUS: IMPLEMENTED
+%%  - Describe: services communicate by publishing and consuming events rather
+%%    than making direct synchronous calls.
+%%  - In SwiftLogistics: every state change in the order lifecycle is represented
+%%    as an event published to the "swift_logistics" topic exchange:
+%%      order created → order.created
+%%      order confirmed → order.status_updated → order.confirmed
+%%      WMS reserved  → order.wms.reserved
+%%      payment charged → order.payment.completed (or .failed)
+%%      delivered → wms.delivery.update_status event chain
+%%  - Benefits: producers and consumers are fully decoupled; CMS adapter
+%%    does not know about Payment Service; new consumers can be added by
+%%    simply binding to an existing routing key.
+%%  - Source reference: pubsub.js (PubSub utility), each service's config.js
+%%    (publishedRoutingKeys / subscribedRoutingKeys sections).
 
 \begin{figure}[H]
     \centering
@@ -33,23 +61,42 @@
 \end{figure}
 
 \subsubsection{API Gateway Pattern}
-% Single entry point for clients
-% Request routing and aggregation
-% Cross-cutting concerns (auth, logging, rate limiting)
+%% GUIDE — STATUS: IMPLEMENTED
+%%  - Describe: a single entry point that handles cross-cutting concerns before
+%%    routing to internal services.
+%%  - In SwiftLogistics (source-code/services/api-gateway/index.js):
+%%      · Authentication: validateToken() verifies HS256 JWT and throws 401 early.
+%%      · Identity propagation: injects x-username and x-role into forwarded headers.
+%%      · Routing: resolveTarget() maps URL prefix to internal Docker service URL.
+%%      · WebSocket proxying: upgrade events forwarded via proxy.ws().
+%%  - Benefits: internal services are shielded from public access; authentication
+%%    logic is centralized (no service re-implements token verification).
 
 \subsubsection{Service Mesh Pattern}
-% Service-to-service communication management
-% Technologies: Istio/Linkerd
-% Benefits for observability and security
+%% GUIDE — STATUS: NOT IMPLEMENTED IN PROTOTYPE
+%%  - Describe the concept: a dedicated infrastructure layer (sidecar proxies or
+%%    eBPF-based) that handles service-to-service traffic, observability, and
+%%    mutual TLS transparently.
+%%  - State clearly: not implemented in the prototype; Docker's internal DNS and
+%%    direct AMQP connections serve the equivalent purpose at prototype scale.
+%%  - Production recommendation: Istio or Linkerd would provide mTLS,
+%%    traffic shaping, distributed tracing (Jaeger/Zipkin) in production.
 
 \subsection{Integration Patterns}
 \label{subsec:integration_patterns}
-% Enterprise integration patterns used
 
 \subsubsection{Message Channel}
-% Point-to-point and publish-subscribe channels
-% How messages flow through channels
-% Channel types in SwiftLogistics
+%% GUIDE — STATUS: IMPLEMENTED
+%%  - In SwiftLogistics: RabbitMQ queues are the message channels.
+%%  - All queues are durable (survive broker restart).
+%%  - Two channel types in use:
+%%      Point-to-point: each service has a stable, named queue
+%%        (e.g. "order-service-queue.cms.order.create"). Only one instance
+%%        (or competing group) consumes from each queue.
+%%      Pub-Sub fanout: Notify Service creates a unique per-instance queue
+%%        (notifier.${HOSTNAME}) bound to notify.* patterns, so every
+%%        running instance receives all notification events.
+%%  - Source: utility/pubsub.js, subscribe() method shows assertQueue + bindQueue.
 
 \begin{figure}[H]
     \centering
@@ -59,9 +106,19 @@
 \end{figure}
 
 \subsubsection{Message Translator}
-% Protocol translation (SOAP/REST/TCP-IP)
-% Data format transformation (XML/JSON/Binary)
-% Adapter implementations
+%% GUIDE — STATUS: IMPLEMENTED
+%%  - In SwiftLogistics each adapter is a Message Translator:
+%%     · CMS Adapter: receives canonical JSON (correlationId, clientId, orderData)
+%%       → translates to SOAP/XML CreateOrder envelope using soap npm → returns
+%%       canonical JSON result (orderId, status) back to the exchange.
+%%     · ROS Adapter: receives { correlationId, locations[] } → translates to
+%%       HTTP POST with JSON body to /api/ros/optimize-route via axios → returns
+%%       optimised route as JSON.
+%%     · WMS Adapter: receives { correlationId, orderId, itemList } → translates
+%%       to HTTP POST /api/wms/reserve via axios → returns { reservationId }.
+%%  - All adapters present a homogeneous AMQP interface to the rest of the system
+%%    regardless of the underlying legacy protocol.
+%%  - Source: cms-adapter/index.js, ros-adapter/index.js, wms-adapter/index.js.
 
 \begin{figure}[H]
     \centering
@@ -71,19 +128,42 @@
 \end{figure}
 
 \subsubsection{Content-Based Router}
-% Routing messages based on content
-% Decision logic for message routing
-% Implementation in message broker
+%% GUIDE — STATUS: IMPLEMENTED (via RabbitMQ topic exchange)
+%%  - RabbitMQ's topic exchange acts as the content-based router: the routing key
+%%    on each published message determines which queue(s) receive it.
+%%  - Example: when Order Service publishes order.confirmed, only the WMS Adapter
+%%    queue (bound to "order.confirmed") receives it — CMS and ROS adapters are
+%%    not notified, even though they are all connected to the same exchange.
+%%  - Example: notify.* routing key pattern means all notify.order.* and
+%%    notify.client.* events land in the Notify Service queue(s).
 
-\subsubsection{Request-Reply Pattern}
-% Synchronous communication pattern
-% Used for critical operations
-% Correlation identifiers
+\subsubsection{Request-Reply (Async RPC) Pattern}
+%% GUIDE — STATUS: IMPLEMENTED
+%%  - Used wherever a service needs a response from a legacy system but must
+%%    remain non-blocking.
+%%  - In SwiftLogistics:
+%%     · Items Service (items-service/index.js): publishes wms.items.request with
+%%       a correlationId, stores the correlationId in pendingItemRequests Map,
+%%       then uses Notify Service to push the response when wms.items.response
+%%       arrives.
+%%     · Order Service: similar pattern for order creation (publishes cms.order.create
+%%       with correlationId; awaits order.created reply keyed by correlationId).
+%%  - Correlation IDs are generated from the x-request-id idempotency header sent
+%%    by the client, ensuring exactly-once processing for duplicate requests.
 
 \subsubsection{Publish-Subscribe Pattern}
-% Real-time updates distribution
-% Event broadcasting to multiple consumers
-% Used for driver notifications and client updates
+%% GUIDE — STATUS: IMPLEMENTED
+%%  - Used for broadcasting events to multiple independent consumers.
+%%  - In SwiftLogistics: every event published to the "swift_logistics" topic
+%%    exchange is automatically routed to ALL queues whose binding key matches
+%%    the routing key.
+%%  - Key example: order.confirmed is consumed by BOTH the WMS Adapter (to
+%%    reserve stock) and potentially the Route Service — producers need not know
+%%    the list of consumers.
+%%  - Notify Service pub-sub is the primary real-time delivery mechanism: any
+%%    service publishes notify.<userId>.<event> and the Notify Service pushes
+%%    it over WebSocket to the connected user.
+%%  - Source: PubSub.subscribe() in utility/pubsub.js.
 
 \begin{figure}[H]
     \centering
@@ -93,19 +173,57 @@
 \end{figure}
 
 \subsubsection{Competing Consumers}
-% Load distribution across multiple instances
-% High-volume order processing
-% Scalability benefits
+%% GUIDE — STATUS: ARCHITECTURALLY SUPPORTED (single instance in prototype)
+%%  - Describe: multiple consumer instances share a single durable queue;
+%%    RabbitMQ delivers each message to exactly one consumer (round-robin).
+%%  - In SwiftLogistics: the prototype runs one instance per service, but the
+%%    design supports horizontal scaling. Adding a second order-service container
+%%    means both instances share "order-service-queue.*" queues; each message
+%%    is processed by exactly one instance — no double-processing.
+%%  - Exception: Notify Service uses unique per-instance queues so ALL instances
+%%    receive ALL notification events (fanout, not competing consumer).
 
 \subsubsection{Dead Letter Channel}
-% Handling failed messages
-% Retry mechanisms
-% Error recovery
+%% GUIDE — STATUS: ARCHITECTURALLY DESCRIBED, NOT IMPLEMENTED IN PROTOTYPE
+%%  - Describe: messages that cannot be processed (e.g. persistent SOAP errors,
+%%    repeatedly nacked messages) are routed to a separate Dead Letter Exchange
+%%    for inspection and retry.
+%%  - What should happen in production:
+%%     · Configure x-dead-letter-exchange and x-message-ttl on each adapter queue.
+%%     · Failed processing: adapter catches exception and nacks without requeue,
+%%       causing RabbitMQ to reroute to the DLX.
+%%     · A separate DLQ consumer logs the failure, alerts ops, and retries later.
+%%  - Current prototype: on exception, adapters log the error and drop the message
+%%    (ack is still sent by PubSub.subscribe). This is a gap noted in limitations.
 
-\subsubsection{Saga Pattern}
-% Distributed transaction management
-% Compensation mechanisms
-% Order processing saga example
+\subsubsection{Saga Pattern (Choreography)}
+%% GUIDE — STATUS: IMPLEMENTED
+%%  - Describe: a distributed transaction is implemented as a sequence of local
+%%    transactions, each publishing an event that triggers the next step. No
+%%    central orchestrator; each service reacts to events and emits new events
+%%    or compensating events.
+%%  - Order creation saga in SwiftLogistics (correlationId links all steps):
+%%
+%%     Step 1:  Client → POST /order
+%%              Order Service publishes  cms.order.create
+%%     Step 2:  CMS Adapter processes → publishes  order.created
+%%     Step 3:  Payment Service receives order.created →
+%%              creates payment intent → publishes notify.order.payment_intent_created
+%%     Step 4:  Client confirms → PATCH /order {status: order_confirmed, paymentToken}
+%%              Order Service publishes  cms.order.update_status
+%%     Step 5:  CMS Adapter updates → publishes  order.status_updated
+%%     Step 6:  Order Service receives order.status_updated →
+%%              publishes  order.confirmed
+%%     Step 7:  WMS Adapter reserves stock → publishes  order.wms.reserved
+%%     Step 8:  Order Service receives order.wms.reserved →
+%%              publishes  payment.charge  (using stashed paymentToken)
+%%     Step 9a: Payment succeeds → publishes order.payment.completed →
+%%              Order Service notifies client
+%%     Step 9b: Payment fails   → publishes order.payment.failed →
+%%              Order Service publishes wms.order.release  (COMPENSATION)
+%%              WMS Adapter releases reservation (saga rollback)
+%%  - Source: order-service/index.js (pendingPayments Map tracks correlationId)
+%%            payment-service/index.js, wms-adapter/index.js.
 
 \begin{figure}[H]
     \centering
@@ -116,12 +234,14 @@
 
 \subsection{Pattern Interaction and Composition}
 \label{subsec:pattern_composition}
-% How patterns work together
-% Example scenarios showing multiple patterns
 
 \subsubsection{Order Submission Flow}
-% Sequence diagram showing pattern interaction
-% From client submission to all systems updated
+%% GUIDE:
+%%  - Describe how multiple patterns cooperate in the order submission flow
+%%    (Saga + Message Translator + Publish-Subscribe + Async RPC).
+%%  - Reference the workflow diagram: workflow-diagrams/order-workflow.mmd
+%%  - Step-by-step narrative of the saga documented above, naming which
+%%    pattern is responsible at each step.
 
 \begin{figure}[H]
     \centering
@@ -131,8 +251,16 @@
 \end{figure}
 
 \subsubsection{Real-time Update Flow}
-% Pattern composition for real-time tracking
-% Event propagation from driver app to client portal
+%% GUIDE:
+%%  - Describe: when a driver marks a package as delivered (PATCH /deliveries),
+%%    how the event propagates to the client portal in real time.
+%%  - Flow: Delivery Service → wms.delivery.update_status →
+%%    WMS Adapter updates WMS status → Delivery Service receives reply →
+%%    publishes notify.<clientId>.delivery_update → Notify Service →
+%%    WebSocket push to client portal.
+%%  - Patterns involved: Publish-Subscribe, Message Translator (WMS Adapter),
+%%    Request-Reply (Delivery Service awaits WMS confirm).
+%%  - Reference: workflow-diagrams/delivery-complete-workflow.mmd
 
 \begin{figure}[H]
     \centering
@@ -143,13 +271,33 @@
 
 \subsection{Rationale for Pattern Selection}
 \label{subsec:pattern_rationale}
-% Why these specific patterns were chosen
-% How they address the architectural challenges:
-%   - Heterogeneous systems integration
-%   - Real-time tracking and notifications
-%   - High-volume asynchronous processing
-%   - Transaction management
-%   - Scalability and resilience
-%   - Security
 
-% Justification with reference to requirements from Section~\ref{sec:introduction}
+%% GUIDE — List each architectural challenge from §\ref{sec:introduction}
+%%   and state which pattern(s) address it, with a one-sentence justification.
+%%
+%%   Challenge 1 – Heterogeneous Integration:
+%%     Message Translator pattern (CMS/ROS/WMS adapters) — isolates protocol
+%%     and data-format conversion within a single component per system.
+%%
+%%   Challenge 2 – Real-time Tracking:
+%%     Publish-Subscribe + Event-Driven Architecture — Notify Service subscribes
+%%     to all notify.* events and pushes over WebSocket without polling.
+%%
+%%   Challenge 3 – High-Volume Async Processing:
+%%     Message Channel (durable queues) + Competing Consumers —
+%%     orders are buffered in the queue during traffic spikes; multiple
+%%     consumer instances drain the queue without degrading the portal response.
+%%
+%%   Challenge 4 – Transaction Management:
+%%     Saga Pattern (choreography) + Async RPC (correlationId) — each step
+%%     of the distributed order transaction is an independent local operation
+%%     with a compensating event for rollback.
+%%
+%%   Challenge 5 – Scalability and Resilience:
+%%     Microservices Architecture + Competing Consumers — each service scales
+%%     independently; RabbitMQ durable queues act as the buffer that prevents
+%%     data loss when a consumer service restarts.
+%%
+%%   Challenge 6 – Security:
+%%     API Gateway Pattern — single enforcement point for JWT verification;
+%%     no internal service is directly reachable from outside the Docker network.
