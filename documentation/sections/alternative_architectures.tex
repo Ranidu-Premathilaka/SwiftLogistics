@@ -3,7 +3,7 @@
 
 Before arriving at the proposed event-driven microservices architecture, two well-established architectural approaches were evaluated as candidates for the SwiftTrack integration platform. This section describes each alternative, analyses its strengths and weaknesses in the context of SwiftLogistics' requirements, and explains why it was ultimately not selected.
 
-% ─────────────────────────────────────────────────────────────
+% Too much detailed, should be concise
 \subsection{Alternative 1: Service-Oriented Architecture (SOA) with an Enterprise Service Bus}
 \label{subsec:alt1}
 
@@ -99,7 +99,7 @@ Applied to SwiftLogistics, this architecture would be realised as follows:
 
 The three-tier architecture was rejected primarily because synchronous, blocking integration is irreconcilable with SwiftLogistics' peak-load requirements and its zero-order-loss guarantee. During promotional sales periods, the system must process a large volume of incoming orders concurrently. A synchronous application server would queue all requests serially, with each request blocked on—potentially slow—calls to the ROS for route optimisation and the WMS via TCP/IP, producing unacceptable response times and a high risk of request timeouts. Furthermore, without a durable message broker, the architecture provides no recovery mechanism for partial transaction failures, making it impossible to guarantee that every submitted order is ultimately processed. The event-driven, microservices-based proposed architecture decouples reception from processing, enabling the platform to immediately acknowledge client requests and process them asynchronously without risking data loss.
 
-% ─────────────────────────────────────────────────────────────
+% Remove Comparative Analysis section
 \subsection{Comparative Analysis}
 \label{subsec:comparison}
 

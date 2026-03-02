@@ -1,6 +1,8 @@
 \section{Information Security Considerations}
 \label{sec:security}
 
+% We don't have the right to implement TLS in the prototype, therefore we can essentially remove TLS related content and mention that it is a production requirement.
+
 This section covers security controls applied at design time and those implemented in the prototype. A clear distinction is made between controls that are operational and those deferred to a production deployment.
 
 \subsection{Security Requirements}
@@ -119,6 +121,7 @@ All services write structured logs to stdout, captured by Docker. The Auth Servi
 \subsection{Security in the Prototype vs Production}
 \label{subsec:security_prototype}
 
+% This table information is enough; no need to describe in text, a short paragraph summarising is sufficient
 \begin{table}[H]
     \centering
     \caption{Security Controls: Prototype vs Production}

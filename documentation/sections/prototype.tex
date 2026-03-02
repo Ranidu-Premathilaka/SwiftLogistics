@@ -32,6 +32,7 @@ The prototype demonstrates the described architecture using fully open-source, c
 
 The mock CMS is a Node.js SOAP server defined by \texttt{cms.wsdl} and implemented in \texttt{cms-service/index.js}. It persists order data in PostgreSQL using the schema in \texttt{source-code/db/cms.sql}. The CMS Adapter (\texttt{cms-adapter/index.js}) creates a typed client from the WSDL at startup using the \texttt{soap} library and calls the server at \texttt{127.0.0.1:3000} within the same container.
 
+% Remove code snippets
 \begin{lstlisting}[language=XML, caption=Sample SOAP CreateOrder Request]
 <?xml version="1.0" encoding="utf-8"?>
 <soapenv:Envelope

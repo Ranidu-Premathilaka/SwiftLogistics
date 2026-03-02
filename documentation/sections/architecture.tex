@@ -3,6 +3,7 @@
 
 The SwiftTrack platform is implemented as an event-driven microservices architecture. Thirteen Docker containers communicate asynchronously through a single RabbitMQ topic exchange named \texttt{swift\_logistics}. All external traffic enters through an API Gateway; no internal service is reachable from outside the Docker network.
 
+% Add an overall architecture section instead
 \subsection{Conceptual Architecture}
 \label{subsec:conceptual}
 
