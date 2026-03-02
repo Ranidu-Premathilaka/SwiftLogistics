@@ -76,7 +76,7 @@ the platform is otherwise complete and test-driven.
   \item Add TLS termination via Nginx or Traefik in front of the API Gateway
         using Let's Encrypt certificates.
   \item Implement the Dead Letter Exchange and configurable retry policies
-        designed in Section~\ref{sec:architectural_patterns}.
+        designed in Section~\ref{sec:patterns}.
   \item Persist Saga state (\texttt{pendingPayments} Map) to PostgreSQL to
         survive container restarts.
   \item Replace the dummy payment processor with a real provider (PayHere or Stripe).

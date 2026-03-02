@@ -9,6 +9,22 @@
 \usepackage{listings}
 \usepackage{xcolor}
 
+% Listings configuration
+\lstset{
+    basicstyle=\small\ttfamily,
+    breaklines=true,
+    breakatwhitespace=true,
+    showstringspaces=false,
+    frame=single,
+    captionpos=b,
+    tabsize=2
+}
+\lstdefinelanguage{JSON}{
+    morestring=[b]",
+    morecomment=[l]{//},
+    morekeywords={true,false,null}
+}
+
 \newif\ifdraft
 \drafttrue 
 
