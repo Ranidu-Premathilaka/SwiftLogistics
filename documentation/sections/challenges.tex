@@ -1,189 +1,92 @@
 \section{Addressing Architectural Challenges}
-\label{sec:challenges}
-
 \subsection{Overview}
 
-The six architectural challenges identified in the assignment scenario are each addressed through a combination of the patterns, technology choices, and implementation decisions described in the preceding sections. This section maps each challenge to its specific solution and discusses the trade-offs involved.
+Though most of these challenges are addressed and explained in the previous sections, this section will provide a consolidated view on how we have addressed these challenges in our architecture.
 
 \subsection{Challenge 1: Heterogeneous Systems Integration}
-\label{subsec:challenge1}
 
-\subsubsection{Problem Description}
+\subsubsection{Solution}
 
-Swift Logistics operates three legacy systems with incompatible interfaces: CMS (SOAP/XML), ROS (REST/JSON), and WMS (proprietary TCP/IP). Integrating them into a unified platform without modifying their interfaces is the core integration challenge.
-
-\subsubsection{Solution Approach}
-
-Each legacy system is wrapped in a dedicated adapter container (the Message Translator pattern, described in Section~\ref{subsec:integration_patterns}). The adapter is the only component that knows the native protocol of its system. All other services interact with the adapter exclusively through AMQP events on the \texttt{swift\_logistics} exchange. If a legacy system changes its interface, only its adapter needs to change.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{figures/heterogeneous_integration.pdf}
-    \caption{Heterogeneous Systems Integration Solution}
-    \label{fig:hetero_integration}
-\end{figure}
-
-\subsubsection{Implementation Details}
-
-The CMS Adapter (\texttt{cms-adapter/index.js}) creates a typed SOAP client from \texttt{cms.wsdl} at startup using the \texttt{soap} library and invokes the four SOAP operations as JavaScript async calls. The ROS Adapter (\texttt{ros-adapter/index.js}) calls \texttt{POST /api/ros/optimize-route} via \texttt{axios}. The WMS Adapter (\texttt{wms-adapter/index.js}) calls the five WMS REST endpoints via \texttt{axios}, simulating the TCP/IP boundary as intra-container HTTP. All three adapters share the same PubSub utility and present an identical AMQP interface to the rest of the system.
+Each legacy system is wrapped in a dedicated adapter container (the Adapter pattern, described in Section~\ref{subsec:integration_patterns}). The adapter is the only component that knows the native protocol of its system. All other services interact with the adapter exclusively through AMQP events. If a legacy system changes its interface, only its adapter needs to change.
 
 \subsubsection{Benefits Achieved}
 
-Protocol changes in any legacy system require modifying only its adapter container; all other services remain unchanged. Adding a new integration (e.g.\ a GPS tracking service) requires only a new adapter container with no changes to existing services. The CMS SOAP contract (\texttt{cms.wsdl}) acts as the single boundary artefact for the CMS integration.
+\begin{itemize}
+    \item Protocol changes in any legacy system require modifying only its adapter container, leaving all other services unchanged.
+    \item Adding a new integration (e.g.\ a GPS tracking service) requires only a new adapter to interface with the message broker with no changes to existing services.
+\end{itemize} 
 
 \subsection{Challenge 2: Real-time Tracking and Notifications}
 \label{subsec:challenge2}
 
-\subsubsection{Problem Description}
+\subsubsection{Solution}
 
-When a driver marks a package as delivered, the client portal must reflect the change immediately. Drivers must also receive push notifications for new delivery assignments and route changes. HTTP polling is inefficient and introduces unacceptable latency at scale.
-
-\subsubsection{Solution Approach}
-
-The Notify Service runs a WebSocket server (the \texttt{ws} library) and subscribes to all \texttt{notify.*} routing keys on a unique per-instance queue. Any service that needs to notify a user publishes \texttt{notify.<userId>.<event>} to the exchange. Online users receive a JSON frame immediately; offline users with \texttt{persist=1} messages have them stored in \texttt{pending\_notifications} and delivered on reconnect. The design is described in detail in Section~\ref{subsec:realtime_tracking}.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{figures/realtime_solution.pdf}
-    \caption{Real-time Tracking Solution Architecture}
-    \label{fig:realtime_solution}
-\end{figure}
-
-\subsubsection{Implementation Details}
-
-When a driver marks a delivery complete (\texttt{PATCH /deliveries}), the Delivery Service publishes \texttt{wms.delivery.update\_status}. The WMS Adapter updates the mock WMS and the Delivery Service then publishes \texttt{notify.<clientId>.delivery\_update}. The Notify Service pushes the frame to the client's WebSocket if connected, or persists it to \texttt{pending\_notifications} if offline. Route assignments follow the same path: the Route Service publishes \texttt{notify.<driverUsername>.delivery\_route\_assigned} after the ROS call returns.
+The Notify Service runs a WebSocket server and subscribes to all \texttt{notify.*} routing keys. Any service that needs to notify a user publishes to that with info such as the userid, payload, etc. While online users receive a the data immediately through the websocket offline users messages will be stored and delivered on reconnect(Only if the notification isn't time critial if so the message is dropped). By using this services can send out real-time updates when for example if a driver picks up an order to notify the according users by sending these events out.
 
 \subsubsection{Benefits Achieved}
 
-The architecture is zero-polling: updates arrive at the client within milliseconds of the triggering event. Offline clients do not miss notifications; the \texttt{pending\_notifications} store ensures delivery on reconnect. The per-instance unique queue design allows the Notify Service to be scaled horizontally without any code change to message producers.
+\begin{itemize}
+    \item The architecture uses no polling, reducing both client and service-side handling overhead.
+    \item Offline clients do not miss persistent notifications and ensures delivery on reconnect.
+    \item The per-instance unique queue design allows the Notify Service to be scaled horizontally without any code change to message producers.
+\end{itemize}
 
 \subsection{Challenge 3: High-Volume, Asynchronous Processing}
-\label{subsec:challenge3}
 
-\subsubsection{Problem Description}
+\subsubsection{Solution}
 
-During peak commercial events (Avurudu, Black Friday), the system must handle a surge of concurrent order submissions. Each order triggers multiple downstream operations (CMS, WMS, ROS, Payment) that may be slow or temporarily unavailable. The client portal must remain responsive and no orders must be lost.
-
-\subsubsection{Solution Approach}
-
-A RabbitMQ durable queue decouples order submission from backend processing. The Order Service publishes \texttt{cms.order.create} and immediately returns HTTP~200 to the client. CMS, WMS, Payment, and ROS adapters consume from their own queues at their own pace. If any adapter is temporarily down, messages wait safely in the durable queue. Adding more instances of an adapter service allows the queue to drain faster without code changes (Competing Consumers pattern).
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{figures/async_processing.pdf}
-    \caption{Asynchronous Processing Architecture}
-    \label{fig:async_processing}
-\end{figure}
-
-\subsubsection{Implementation Details}
-
-The PubSub utility (\texttt{utility/pubsub.js}) declares all queues with \texttt{\{durable: true\}} and calls \texttt{channel.ack(msg)} only after the handler function completes successfully. This means a consumer crash while processing a message does not lose it; the broker redelivers once the consumer reconnects. On AMQP connection loss, PubSub retries every~5 seconds and re-registers all subscribers automatically.
+Once a order submission or any high processing request is received the system will send a response to the client immediately and then the saga for that particular task will start using events through the message broker. Once the saga is completed either successfully or with a failure the system will send back the result through the webscocket to the client referencing its' idempotency key.
 
 \subsubsection{Benefits Achieved}
 
-The portal is always responsive: HTTP responses are returned before any CMS, WMS, or ROS processing begins. No orders are lost even if a backend service restarts mid-processing. Horizontal scale-out requires only running additional container instances of the bottleneck service.
+\begin{itemize}
+    \item The portal is always responsive, as responses are returned before any backend processing begins.
+    \item The message broker's atleast once delivery guarantee ensures no event is lost during high loads where messages are queued until the system is ready to process them.
+    \item The system can scale horizontally to handle increased load without any code changes.
+\end{itemize}
 
 \subsection{Challenge 4: Transaction Management}
 \label{subsec:challenge4}
 
-\subsubsection{Problem Description}
+\subsubsection{Solution}
 
-A single order creates state in three independent systems: a record in the CMS, a stock reservation in the WMS, and a payment charge by the Payment Service. If any step fails after earlier steps have committed, the system must roll back the completed steps. Traditional two-phase commit is impractical in an asynchronous, event-driven architecture.
+The choreography-based Saga pattern is used where each service performs a local transaction and publishes an event. The next service in the chain reacts to that event. On failure, the failing service publishes a compensating event that triggers rollback in already-completed services thus no central coordinator is required. These events are published with the same idempotency key allowing the entire transaction flow to be traced through with context. Examples of these transactions are listed in Section~\ref{subsec:user_stories}
 
-\subsubsection{Solution Approach}
-
-The choreography-based Saga pattern is used (described in Section~\ref{subsec:integration_patterns}). Each service performs a local transaction and publishes an event. The next service in the chain reacts to that event. On failure, the failing service publishes a compensating event that triggers rollback in already-completed services. No central coordinator is required; the Order Service tracks saga state using a \texttt{pendingPayments} Map keyed by \texttt{correlationId}.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{figures/transaction_management.pdf}
-    \caption{Distributed Transaction Management with Saga Pattern}
-    \label{fig:transaction_mgmt}
-\end{figure}
-
-\subsubsection{Implementation Details}
-
-The nine-step saga is: (1)~Order Service publishes \texttt{cms.order.create}; (2)~CMS creates order~\textrightarrow~\texttt{order.created}; (3)~Payment Service creates payment intent; (4)~client confirms~\textrightarrow~Order Service publishes \texttt{cms.order.update\_status}; (5)~CMS updates~\textrightarrow~\texttt{order.status\_updated}; (6)~Order Service publishes \texttt{order.confirmed}; (7)~WMS Adapter reserves stock~\textrightarrow~\texttt{order.wms.reserved}; (8)~Order Service publishes \texttt{payment.charge}; (9a)~payment succeeds~\textrightarrow~\texttt{order.payment.completed}.
-
-Compensation on step 9b (payment fails): Order Service publishes \texttt{wms.order.release}; WMS Adapter releases the reservation. The \texttt{pendingPayments} Map (in \texttt{order-service/index.js}) stores \texttt{\{paymentToken, clientId\}} per \texttt{correlationId}, populated at step~4 and consumed at step~8.
-
-\subsubsection{Recovery Scenarios}
-
-\begin{description}
-    \item[Scenario A: CMS Adapter fails before creating order.] The \texttt{cms.order.create} message stays in the durable queue. When the adapter restarts it picks up and processes the message; no state was committed so no compensation is needed.
-    \item[Scenario B: WMS Adapter fails after CMS confirms.] The \texttt{order.confirmed} message is redelivered when the WMS Adapter restarts. The adapter performs the WMS reserve call idempotently.
-    \item[Scenario C: Payment fails after WMS reserved.] Order Service receives \texttt{order.payment.failed} and publishes \texttt{wms.order.release}. WMS Adapter releases the reservation. The client is notified to retry payment.
-    \item[Scenario D: Broker unreachable.] All services restart their AMQP connection with five-second back-off and re-register subscribers automatically. In-flight saga state in the Order Service in-memory Map may be lost on pod restart (known limitation; production fix: persist to PostgreSQL).
-\end{description}
 
 \subsubsection{Benefits Achieved}
 
-No two-phase commit or distributed lock is required. The system reaches eventual consistency across CMS, WMS, and Payment even when one service temporarily fails. Compensating events provide a clean rollback path that is verifiable by inspecting routing key sequences.
+\begin{itemize}
+    \item No two-phase commit or distributed lock is required.
+    \item The system reaches eventual consistency across CMS, WMS, and Payment even when one service temporarily fails.
+    \item Compensating events provide a clean rollback path that is verifiable by inspecting routing key sequences.
+\end{itemize}
 
 \subsection{Challenge 5: Scalability and Resilience}
 \label{subsec:challenge5}
 
-\subsubsection{Problem Description}
+\subsubsection{Solution}
 
-Swift Logistics will grow the number of clients, drivers, and daily deliveries over time. The architecture must scale individual components horizontally and tolerate a single container failure without data loss.
-
-\subsubsection{Solution Approach}
-
-Each of the thirteen containers is independently deployable and scalable. Durable RabbitMQ queues buffer messages when a consumer is temporarily unavailable. Every container is configured with \texttt{restart: unless-stopped}. Docker Compose health checks (\texttt{rabbitmq-diagnostics ping}) prevent services from starting before their dependencies are ready. For production, Kubernetes with Horizontal Pod Autoscaler would provide automatic scale-out based on queue depth or CPU usage.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{figures/scalability_resilience.pdf}
-    \caption{Scalability and Resilience Architecture}
-    \label{fig:scalability}
-\end{figure}
-
-\subsubsection{Implementation Details}
-
-The RabbitMQ health check in \texttt{docker-compose.yml} runs \texttt{rabbitmq-diagnostics ping} and all AMQP-dependent services use \texttt{depends\_on: condition: service\_healthy}. Every container is configured with \texttt{restart: unless-stopped}. The PubSub utility re-establishes the AMQP connection and re-registers all subscribers automatically after a five-second back-off on connection loss. The Notify Service unique per-instance queue design means each additional instance independently receives all \texttt{notify.*} events, enabling WebSocket delivery capacity to scale out with a single configuration change.
+Each of the containers is independently deployable and scalable horizontally. Durable RabbitMQ queues buffer messages when a consumer is temporarily unavailable. For production, Kubernetes would provide automatic scale-out based on queue depth or CPU usage.
 
 \subsubsection{Benefits Achieved}
 
-A single container failure does not cause data loss because durable queues hold unprocessed messages until the container restarts. The \texttt{restart: unless-stopped} policy provides automatic recovery without operator intervention. Each service scales independently, so peak order processing capacity can be increased without affecting Auth or Payment services.
+\begin{itemize}
+    \item A single container failure does not cause data loss because durable queues hold unprocessed messages until the container restarts.
+    \item The \texttt{restart: unless-stopped} policy provides automatic recovery without operator intervention.
+    \item Each service scales independently, so peak order processing capacity can be increased without affecting Auth or Payment services.
+\end{itemize}
 
 \subsection{Challenge 6: Security}
 \label{subsec:challenge6}
 
-\subsubsection{Problem Description}
+\subsubsection{Solution}
 
-Client-to-backend communication carries sensitive order data and credentials. The third-party ROS API is accessed over the public internet. Internal services must remain inaccessible to external actors even if a gateway vulnerability is exploited. Full security coverage is detailed in Section~\ref{sec:security}.
-
-\subsubsection{Solution Approach}
-
-The API Gateway Pattern concentrates authentication at one point: all external traffic enters through a single JWT-enforced endpoint (port~8081) and no internal service port is host-exposed. Passwords are hashed with bcrypt (cost factor~10). All PostgreSQL queries are parameterised. The Docker \texttt{internal} bridge network prevents any external access to internal services. Production additions (TLS, rate limiting, mTLS, secrets manager) are described in Table~\ref{tab:security_comparison}.
+The API Gateway enforces all requests to go through it where it only exposes the nessassary services to outside. There JWT verification is done at the gateway level making sure that only authorized users are allowed in the system. the /auth endpoint is allowed without token verification where it's the sole service that handles user registration and login.
 
 \subsubsection{Benefits Achieved}
 
-A compromised client token cannot be used to call internal services directly because no internal port is reachable from outside. bcrypt hashes protect credentials even in the event of database exfiltration. Centralising authentication at the API Gateway reduces the security audit surface to a single service.
+\begin{itemize}
+    \item A compromised client token cannot be used to call internal services directly because no internal port is reachable from outside.
+    \item Centralising authentication at the API Gateway reduces the security audit surface to a single service.
+\end{itemize}
 
-\subsection{Summary}
-
-The combination of the event-driven microservices architecture, the adapter pattern for heterogeneous integration, the Saga pattern for distributed transactions, WebSocket push for real-time updates, and the API Gateway for security collectively addresses all six challenges identified in the assignment scenario. Table~\ref{tab:challenge_solution} summarises the mapping.
-
-\begin{table}[H]
-    \centering
-    \caption{Challenge-Solution Mapping}
-    \label{tab:challenge_solution}
-    \begin{tabular}{|p{4cm}|p{5cm}|p{5cm}|}
-        \hline
-        \textbf{Challenge} & \textbf{Solution} & \textbf{Key Pattern/Technology} \\
-        \hline
-        Heterogeneous Integration & Adapter services & Message Translator Pattern \\
-        \hline
-        Real-time Updates & Event-driven architecture & Pub-Sub Pattern, WebSocket \\
-        \hline
-        High-Volume Processing & Asynchronous messaging & Message Broker, Queues \\
-        \hline
-        Transaction Management & Saga pattern & Compensating Transactions \\
-        \hline
-        Scalability & Microservices & Kubernetes, Auto-scaling \\
-        \hline
-        Security & Multiple layers & TLS, JWT/HS256, API Gateway \\
-        \hline
-    \end{tabular}
-\end{table}
