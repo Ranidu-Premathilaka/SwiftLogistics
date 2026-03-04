@@ -81,7 +81,7 @@ Each of the containers is independently deployable and scalable horizontally. Du
 
 \subsubsection{Solution}
 
-The API Gateway enforces all requests to go through it where it only exposes the nessassary services to outside. There JWT verification is done at the gateway level making sure that only authorized users are allowed in the system. the /auth endpoint is allowed without token verification where it's the sole service that handles user registration and login.
+The API Gateway enforces all requests to go through it where it only exposes the nessassary services to outside. There JWT verification is done at the gateway level making sure that only authorized users are allowed in the system. the /auth endpoint is allowed without token verification where it's the sole service that handles user registration and login. Security design is explained in more detail in Section~\ref{sec:security}.
 
 \subsubsection{Benefits Achieved}
 
