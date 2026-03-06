@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SwiftLogistics</title>
+<style>
+  :root {
+    --bg: #f8fafc; --surface: #ffffff; --border: #e2e8f0;
+    --text: #1e293b; --text-muted: #64748b; --text-light: #94a3b8;
+    --primary: #3b82f6; --primary-dark: #2563eb; --primary-light: #dbeafe;
+    --green: #22c55e; --green-light: #dcfce7; --green-dark: #16a34a;
+    --red: #ef4444; --red-light: #fee2e2;
+    --yellow: #f59e0b; --yellow-light: #fef3c7;
+    --purple: #8b5cf6; --purple-light: #ede9fe;
+    --orange: #f97316; --orange-light: #ffedd5;
+    --radius: 12px; --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); }
+
+  /* ── Layout ── */
+  .app { min-height: 100vh; display: flex; flex-direction: column; }
+  nav {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 0 24px; height: 56px; display: flex; align-items: center; gap: 16px;
+    box-shadow: var(--shadow); position: sticky; top: 0; z-index: 100;
+  }
+  nav .logo { font-size: 18px; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+  nav .logo svg { width: 24px; height: 24px; }
+  nav .spacer { flex: 1; }
+  nav .user-badge {
+    display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted);
+    background: var(--bg); padding: 6px 12px; border-radius: 20px; border: 1px solid var(--border);
+  }
+  nav .user-badge .role { font-weight: 600; text-transform: capitalize; }
+  nav .user-badge .dot { width: 8px; height: 8px; border-radius: 50%; }
+  nav .user-badge .dot.online { background: var(--green); }
+  nav .user-badge .dot.offline { background: var(--text-light); }
+  .nav-link {
+    font-size: 13px; font-weight: 500; color: var(--text-muted); cursor: pointer; padding: 6px 12px;
+    border-radius: 8px; text-decoration: none; transition: all 0.15s;
+  }
+  .nav-link:hover { background: var(--bg); color: var(--text); }
+  .nav-link.active { background: var(--primary-light); color: var(--primary-dark); }
+  .btn-logout {
+    font-size: 12px; padding: 6px 14px; border: 1px solid var(--border); background: var(--surface);
+    border-radius: 8px; cursor: pointer; color: var(--text-muted); font-family: inherit;
+  }
+  .btn-logout:hover { border-color: var(--red); color: var(--red); }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; flex: 1; }
+
+  /* ── Auth Screen ── */
+  .auth-screen {
+    display: flex; align-items: center; justify-content: center; min-height: calc(100vh - 56px);
+  }
+  .auth-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 40px; width: 400px; box-shadow: var(--shadow-lg);
+  }
+  .auth-card h2 { font-size: 22px; margin-bottom: 4px; }
+  .auth-card p { color: var(--text-muted); font-size: 14px; margin-bottom: 24px; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px; color: var(--text-muted); }
+  .form-group input, .form-group select {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
+    font-size: 14px; font-family: inherit; background: var(--bg); color: var(--text);
+    transition: border-color 0.15s;
+  }
+  .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--primary); }
+  .btn {
+    padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
+    cursor: pointer; font-family: inherit; transition: all 0.15s; display: inline-flex;
+    align-items: center; gap: 8px;
+  }
+  .btn-primary { background: var(--primary); color: white; width: 100%; justify-content: center; }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-sm { padding: 7px 14px; font-size: 13px; }
+  .btn-outline { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+  .btn-outline:hover { background: var(--bg); }
+  .btn-green { background: var(--green); color: white; }
+  .btn-green:hover { background: var(--green-dark); }
+  .btn-red { background: var(--red); color: white; }
+  .btn-red:hover { background: #dc2626; }
+  .auth-toggle { text-align: center; margin-top: 16px; font-size: 13px; color: var(--text-muted); }
+  .auth-toggle a { color: var(--primary); cursor: pointer; text-decoration: underline; }
+  .alert {
+    padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;
+    display: none; align-items: center; gap: 8px;
+  }
+  .alert.error { background: var(--red-light); color: var(--red); display: flex; }
+  .alert.success { background: var(--green-light); color: var(--green-dark); display: flex; }
+
+  /* ── Cards / Grid ── */
+  .page-header { margin-bottom: 20px; display: flex; align-items: center; gap: 12px; }
+  .page-header h1 { font-size: 22px; font-weight: 700; }
+  .page-header .badge {
+    font-size: 12px; padding: 3px 10px; border-radius: 12px; font-weight: 600;
+  }
+  .badge-blue { background: var(--primary-light); color: var(--primary-dark); }
+  .badge-green { background: var(--green-light); color: var(--green-dark); }
+  .badge-yellow { background: var(--yellow-light); color: var(--yellow); }
+  .badge-red { background: var(--red-light); color: var(--red); }
+  .badge-purple { background: var(--purple-light); color: var(--purple); }
+  .badge-orange { background: var(--orange-light); color: var(--orange); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 20px; box-shadow: var(--shadow); transition: all 0.15s;
+  }
+  .card:hover { box-shadow: var(--shadow-lg); }
+  .card h3 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .card .meta { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+  .card .price { font-size: 20px; font-weight: 700; color: var(--green-dark); }
+  .card .stock { font-size: 12px; color: var(--text-muted); }
+  .card .stock.low { color: var(--orange); }
+  .card-actions { margin-top: 12px; display: flex; gap: 8px; }
+
+  /* ── Orders list ── */
+  .order-list { display: flex; flex-direction: column; gap: 12px; }
+  .order-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 20px; box-shadow: var(--shadow); display: flex; align-items: center; gap: 16px;
+  }
+  .order-card .order-info { flex: 1; }
+  .order-card .order-id { font-weight: 600; font-size: 14px; }
+  .order-card .order-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .order-card .order-status { font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 12px; }
+
+  /* ── Driver panel ── */
+  .route-stop {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 20px; margin-bottom: 12px; box-shadow: var(--shadow);
+    display: flex; align-items: center; gap: 16px;
+  }
+  .stop-num {
+    width: 32px; height: 32px; border-radius: 50%; background: var(--primary);
+    color: white; display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 14px; flex-shrink: 0;
+  }
+  .stop-info { flex: 1; }
+  .stop-info .stop-order { font-weight: 600; font-size: 14px; }
+  .stop-info .stop-loc { font-size: 12px; color: var(--text-muted); }
+
+  /* ── Delivery Status ── */
+  .status-timeline { position: relative; padding-left: 24px; margin-top: 16px; }
+  .status-timeline::before {
+    content: ''; position: absolute; left: 7px; top: 4px; bottom: 4px;
+    width: 2px; background: var(--border);
+  }
+  .timeline-item { position: relative; margin-bottom: 16px; padding-left: 20px; }
+  .timeline-item::before {
+    content: ''; position: absolute; left: -20px; top: 4px; width: 12px; height: 12px;
+    border-radius: 50%; background: var(--border); border: 2px solid var(--surface);
+  }
+  .timeline-item.active::before { background: var(--primary); }
+  .timeline-item.done::before { background: var(--green); }
+  .timeline-item .tl-label { font-size: 13px; font-weight: 600; }
+  .timeline-item .tl-time { font-size: 11px; color: var(--text-muted); }
+
+  /* ── Notification toast ── */
+  .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 8px; }
+  .toast {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px 16px; box-shadow: var(--shadow-lg); min-width: 300px; max-width: 420px;
+    animation: slideIn 0.3s ease; font-size: 13px; display: flex; align-items: flex-start; gap: 10px;
+  }
+  .toast .toast-icon { font-size: 18px; flex-shrink: 0; }
+  .toast .toast-body { flex: 1; }
+  .toast .toast-title { font-weight: 600; font-size: 13px; }
+  .toast .toast-msg { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .toast.toast-success { border-left: 3px solid var(--green); }
+  .toast.toast-info { border-left: 3px solid var(--primary); }
+  .toast.toast-warn { border-left: 3px solid var(--yellow); }
+  .toast.toast-error { border-left: 3px solid var(--red); }
+  @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+  /* ── Loading spinner ── */
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+  .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+  .empty-state h3 { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .empty-state p { font-size: 13px; }
+
+  .hidden { display: none !important; }
+
+  /* ── Cart indicator ── */
+  .cart-count {
+    background: var(--red); color: white; font-size: 10px; font-weight: 700;
+    width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; margin-left: -4px;
+  }
+  .section-divider { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+
+  /* ── Signature Input ── */
+  .sig-input { display: flex; gap: 8px; margin-top: 8px; }
+  .sig-input input { flex: 1; }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- ══════════ NAV ══════════ -->
+  <nav>
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      SwiftLogistics
+    </div>
+    <div class="spacer"></div>
+    <div id="navLinks" class="hidden" style="display:flex;gap:4px;"></div>
+    <div id="userBadge" class="user-badge hidden">
+      <div class="dot offline" id="wsDot"></div>
+      <span id="navUsername">—</span>
+      <span class="role" id="navRole">—</span>
+      <button class="btn-logout" onclick="logout()">Logout</button>
+    </div>
+  </nav>
+
+  <!-- ══════════ AUTH SCREEN ══════════ -->
+  <div class="auth-screen" id="authScreen">
+    <div class="auth-card">
+      <h2 id="authTitle">Sign In</h2>
+      <p id="authSubtitle">Enter your credentials to continue</p>
+      <div id="authAlert" class="alert"></div>
+      <div class="form-group">
+        <label>Username</label>
+        <input id="authUser" placeholder="Enter username" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input id="authPass" type="password" placeholder="Enter password" value="TestPass123!">
+      </div>
+      <div class="form-group" id="roleGroup">
+        <label>Role</label>
+        <select id="authRole">
+          <option value="client">Client — Place & track orders</option>
+          <option value="driver">Driver — Deliver packages</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" id="authBtn" onclick="handleAuth()">
+        <span id="authBtnText">Create Account</span>
+      </button>
+      <div class="auth-toggle" id="authToggle">
+        Already have an account? <a onclick="toggleAuthMode()">Sign in</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ CLIENT: CATALOG ══════════ -->
+  <div class="container hidden" id="pageCatalog">
+    <div class="page-header">
+      <h1>📦 Catalog</h1>
+      <span class="badge badge-blue" id="catalogCount">Loading…</span>
+      <div class="spacer" style="flex:1"></div>
+      <button class="btn btn-sm btn-outline" onclick="loadItems()">↻ Refresh</button>
+    </div>
+    <div class="grid" id="catalogGrid"></div>
+  </div>
+
+  <!-- ══════════ CLIENT: CART ══════════ -->
+  <div class="container hidden" id="pageCart">
+    <div class="page-header">
+      <h1>🛒 Cart</h1>
+      <span class="badge badge-blue" id="cartItemCount">0 items</span>
+    </div>
+    <div id="cartList" class="order-list"></div>
+    <div id="cartEmpty" class="empty-state">
+      <div class="icon">🛒</div>
+      <h3>Your cart is empty</h3>
+      <p>Browse the catalog to add items</p>
+    </div>
+    <hr class="section-divider" id="cartDivider" class="hidden">
+    <div id="cartCheckout" class="hidden" style="margin-top:16px;">
+      <div class="form-group">
+        <label>Delivery Destination</label>
+        <input id="cartDest" placeholder="e.g. 10 Logistics Ave, Zone 42" value="10 Logistics Ave, Zone 42">
+      </div>
+      <button class="btn btn-primary" style="width:auto" onclick="placeOrder()">
+        Place Order — $<span id="cartTotal">0.00</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ══════════ CLIENT: ORDERS ══════════ -->
+  <div class="container hidden" id="pageOrders">
+    <div class="page-header">
+      <h1>📋 My Orders</h1>
+      <div class="spacer" style="flex:1"></div>
+      <button class="btn btn-sm btn-outline" onclick="loadOrders()">↻ Refresh</button>
+    </div>
+    <div id="ordersList" class="order-list"></div>
+    <div id="ordersEmpty" class="empty-state">
+      <div class="icon">📋</div>
+      <h3>No orders yet</h3>
+      <p>Place an order from the catalog</p>
+    </div>
+  </div>
+
+  <!-- ══════════ CLIENT: DELIVERY TRACKING ══════════ -->
+  <div class="container hidden" id="pageTracking">
+    <div class="page-header">
+      <h1>🚚 Delivery Tracking</h1>
+    </div>
+    <div class="form-group" style="max-width:400px;">
+      <label>Order ID</label>
+      <div style="display:flex;gap:8px;">
+        <input id="trackOrderId" placeholder="Enter order ID to track">
+        <button class="btn btn-sm btn-primary" style="width:auto" onclick="trackDelivery()">Track</button>
+      </div>
+    </div>
+    <div id="trackingResult" class="hidden" style="margin-top:20px;">
+      <div class="card">
+        <h3 id="trackOrderLabel">Order</h3>
+        <div class="status-timeline" id="trackTimeline"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ DRIVER: PICKUP ══════════ -->
+  <div class="container hidden" id="pagePickup">
+    <div class="page-header">
+      <h1>📬 Pickup Orders</h1>
+      <div class="spacer" style="flex:1"></div>
+    </div>
+    <div class="card" style="max-width:400px;margin-bottom:20px;">
+      <h3>Request Deliveries</h3>
+      <p class="meta">How many packages do you want to pick up?</p>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input id="pickupCount" type="number" value="1" min="1" max="10" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px;">
+        <button class="btn btn-sm btn-primary" style="width:auto" onclick="requestDeliveries()">Request Route</button>
+      </div>
+    </div>
+    <div id="routeStops"></div>
+    <div id="routeEmpty" class="empty-state">
+      <div class="icon">🗺️</div>
+      <h3>No active route</h3>
+      <p>Request deliveries to get your route</p>
+    </div>
+  </div>
+
+  <!-- ══════════ DRIVER: MANAGE DELIVERIES ══════════ -->
+  <div class="container hidden" id="pageManage">
+    <div class="page-header">
+      <h1>✅ Manage Deliveries</h1>
+    </div>
+    <div class="card" style="max-width:500px;">
+      <h3>Complete or Reject a Delivery</h3>
+      <p class="meta">Enter the order ID and choose an action</p>
+      <div class="form-group" style="margin-top:12px;">
+        <label>Order ID</label>
+        <input id="manageOrderId" placeholder="Enter order ID">
+      </div>
+      <div class="form-group" id="sigGroup">
+        <label>Signature URL (for completion)</label>
+        <input id="manageSigUrl" placeholder="https://cdn.example.com/signature.jpg" value="https://cdn.swiftlogistics.example/signatures/sig-test.jpg">
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-sm btn-green" onclick="completeDelivery()">✔ Complete</button>
+        <button class="btn btn-sm btn-red" onclick="rejectDelivery()">✘ Reject</button>
+      </div>
+    </div>
+    <div id="manageResult" class="hidden" style="margin-top:16px;"></div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+//  State
+// ═══════════════════════════════════════════════════════════════════════════════
+const S = {
+  token: null, username: null, role: null,
+  ws: null, items: [], cart: [],
+  orders: [], routeStops: [],
+  wsWaiters: [],
+};
+let authMode = 'signup'; // signup | login
+let currentPage = null;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  API
+// ═══════════════════════════════════════════════════════════════════════════════
+async function api(method, path, body, token) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  headers['x-request-id'] = `proto-${Date.now()}`;
+  const opts = { method, headers };
+  if (body && method !== 'GET') opts.body = JSON.stringify(body);
+  const res = await fetch(`/api${path}`, opts);
+  let data;
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('json')) data = await res.json(); else data = await res.text();
+  return { status: res.status, body: data };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  WebSocket
+// ═══════════════════════════════════════════════════════════════════════════════
+function connectWs() {
+  return new Promise((resolve, reject) => {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const url = `${proto}://${location.host}/ws?token=${encodeURIComponent(S.token)}&label=${S.role}`;
+    const ws = new WebSocket(url);
+    ws.onopen = () => {};
+    ws.onmessage = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data);
+        if (msg.type === 'ws_connected') {
+          document.getElementById('wsDot').className = 'dot online';
+          resolve(ws);
+        } else if (msg.type === 'ws_message') {
+          handleWsEvent(msg.data);
+        } else if (msg.type === 'ws_closed') {
+          document.getElementById('wsDot').className = 'dot offline';
+        }
+      } catch {}
+    };
+    ws.onerror = () => reject(new Error('WS connection failed'));
+    ws.onclose = () => { document.getElementById('wsDot').className = 'dot offline'; S.ws = null; };
+    setTimeout(() => reject(new Error('WS timeout')), 15000);
+  });
+}
+
+function handleWsEvent(data) {
+  const event = data?.payload?.event;
+  if (!event) return;
+
+  // Deliver to waiters
+  for (let i = 0; i < S.wsWaiters.length; i++) {
+    if (S.wsWaiters[i].matchFn(data)) {
+      const w = S.wsWaiters.splice(i, 1)[0];
+      clearTimeout(w.timer);
+      w.resolve(data);
+      break;
+    }
+  }
+
+  // Toast notification
+  const toastMap = {
+    'items_response':          { icon: '📦', title: 'Inventory Loaded', type: 'info' },
+    'payment_intent_created':  { icon: '💳', title: 'Payment Intent Created', type: 'info' },
+    'payment_completed':       { icon: '✅', title: 'Payment Completed', type: 'success' },
+    'payment_failed':          { icon: '❌', title: 'Payment Failed', type: 'error' },
+    'order_query_response':    { icon: '📋', title: 'Orders Retrieved', type: 'info' },
+    'delivery_status':         { icon: '🚚', title: 'Delivery Status Update', type: 'info' },
+    'driver_route':            { icon: '🗺️', title: 'Route Assigned', type: 'success' },
+    'reservation_failed':      { icon: '⚠️', title: 'Reservation Failed', type: 'warn' },
+  };
+  const t = toastMap[event] || { icon: '🔔', title: event, type: 'info' };
+  showToast(t.type, t.icon, t.title, summarizePayload(data.payload));
+}
+
+function summarizePayload(p) {
+  if (p.orderId) return `Order: ${p.orderId}`;
+  if (p.orders) return `${p.orders.length} order(s)`;
+  if (p.items) return `${p.items.length} item(s)`;
+  if (p.route) return `${p.route.length} stop(s)`;
+  return '';
+}
+
+function waitForEvent(eventName, ms = 25000) {
+  return new Promise((resolve, reject) => {
+    const id = Symbol();
+    const timer = setTimeout(() => {
+      S.wsWaiters = S.wsWaiters.filter(w => w.id !== id);
+      reject(new Error(`Timeout waiting for ${eventName}`));
+    }, ms);
+    S.wsWaiters.push({ id, timer, resolve, reject, matchFn: m => m?.payload?.event === eventName });
+  });
+}
+
+function waitForAny(events, ms = 25000) {
+  const set = new Set(events);
+  return new Promise((resolve, reject) => {
+    const id = Symbol();
+    const timer = setTimeout(() => {
+      S.wsWaiters = S.wsWaiters.filter(w => w.id !== id);
+      reject(new Error(`Timeout waiting for ${events.join('|')}`));
+    }, ms);
+    S.wsWaiters.push({ id, timer, resolve, reject, matchFn: m => set.has(m?.payload?.event) });
+  });
+}
+
+function waitForDeliveryStatus(orderId, ms = 25000) {
+  return new Promise((resolve, reject) => {
+    const id = Symbol();
+    const timer = setTimeout(() => {
+      S.wsWaiters = S.wsWaiters.filter(w => w.id !== id);
+      reject(new Error(`Timeout waiting for delivery_status orderId=${orderId}`));
+    }, ms);
+    S.wsWaiters.push({ id, timer, resolve, reject,
+      matchFn: m => m?.payload?.event === 'delivery_status' && m?.payload?.orderId === orderId,
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Toast
+// ═══════════════════════════════════════════════════════════════════════════════
+function showToast(type, icon, title, msg) {
+  const c = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.innerHTML = `<span class="toast-icon">${icon}</span><div class="toast-body"><div class="toast-title">${title}</div>${msg ? `<div class="toast-msg">${msg}</div>` : ''}</div>`;
+  c.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; setTimeout(() => el.remove(), 300); }, 5000);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Auth
+// ═══════════════════════════════════════════════════════════════════════════════
+function toggleAuthMode() {
+  authMode = authMode === 'signup' ? 'login' : 'signup';
+  document.getElementById('authTitle').textContent = authMode === 'signup' ? 'Create Account' : 'Sign In';
+  document.getElementById('authSubtitle').textContent = authMode === 'signup' ? 'Register a new account' : 'Enter your credentials to continue';
+  document.getElementById('authBtnText').textContent = authMode === 'signup' ? 'Create Account' : 'Sign In';
+  document.getElementById('roleGroup').classList.toggle('hidden', authMode === 'login');
+  document.getElementById('authToggle').innerHTML = authMode === 'signup'
+    ? 'Already have an account? <a onclick="toggleAuthMode()">Sign in</a>'
+    : 'Don\'t have an account? <a onclick="toggleAuthMode()">Create one</a>';
+  document.getElementById('authAlert').className = 'alert';
+}
+
+async function handleAuth() {
+  const user = document.getElementById('authUser').value.trim();
+  const pass = document.getElementById('authPass').value;
+  const role = document.getElementById('authRole').value;
+  const alert = document.getElementById('authAlert');
+  const btn = document.getElementById('authBtn');
+
+  if (!user) { alert.className = 'alert error'; alert.textContent = 'Username is required'; return; }
+  btn.disabled = true;
+
+  try {
+    if (authMode === 'signup') {
+      const { status, body } = await api('POST', '/auth/signup', { username: user, password: pass, role });
+      if (status === 409) { alert.className = 'alert error'; alert.textContent = 'Username already taken'; btn.disabled = false; return; }
+      if (status !== 200) { alert.className = 'alert error'; alert.textContent = body.error || 'Signup failed'; btn.disabled = false; return; }
+      alert.className = 'alert success'; alert.textContent = 'Account created! Logging in…';
+    }
+    // Login
+    const { status, body } = await api('POST', '/auth/login', { username: user, password: pass });
+    if (status !== 200) { alert.className = 'alert error'; alert.textContent = body.error || 'Login failed'; btn.disabled = false; return; }
+
+    S.token = body.accessToken;
+    S.username = user;
+    S.role = body.role || role;
+
+    // Connect WS
+    S.ws = await connectWs();
+    enterApp();
+  } catch (err) {
+    alert.className = 'alert error'; alert.textContent = err.message;
+  } finally { btn.disabled = false; }
+}
+
+function logout() {
+  if (S.ws) { S.ws.close(); S.ws = null; }
+  S.token = null; S.username = null; S.role = null;
+  S.items = []; S.cart = []; S.orders = []; S.routeStops = [];
+  document.getElementById('authScreen').classList.remove('hidden');
+  document.getElementById('userBadge').classList.add('hidden');
+  document.getElementById('navLinks').innerHTML = '';
+  document.getElementById('navLinks').classList.add('hidden');
+  hidePage(currentPage); currentPage = null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Navigation
+// ═══════════════════════════════════════════════════════════════════════════════
+function enterApp() {
+  document.getElementById('authScreen').classList.add('hidden');
+  document.getElementById('userBadge').classList.remove('hidden');
+  document.getElementById('navUsername').textContent = S.username;
+  document.getElementById('navRole').textContent = S.role;
+  document.getElementById('wsDot').className = S.ws ? 'dot online' : 'dot offline';
+
+  const links = document.getElementById('navLinks');
+  links.innerHTML = '';
+  links.classList.remove('hidden');
+
+  if (S.role === 'client') {
+    addNav(links, 'Catalog', 'pageCatalog');
+    addNav(links, 'Cart', 'pageCart');
+    addNav(links, 'Orders', 'pageOrders');
+    addNav(links, 'Tracking', 'pageTracking');
+    navigate('pageCatalog');
+    loadItems();
+  } else {
+    addNav(links, 'Pickup', 'pagePickup');
+    addNav(links, 'Manage', 'pageManage');
+    navigate('pagePickup');
+  }
+}
+
+function addNav(container, label, pageId) {
+  const a = document.createElement('a');
+  a.className = 'nav-link';
+  a.textContent = label;
+  a.dataset.page = pageId;
+  a.onclick = () => navigate(pageId);
+  if (label === 'Cart') {
+    const badge = document.createElement('span');
+    badge.className = 'cart-count hidden';
+    badge.id = 'cartBadge';
+    badge.textContent = '0';
+    a.appendChild(badge);
+  }
+  container.appendChild(a);
+}
+
+function navigate(pageId) {
+  if (currentPage) hidePage(currentPage);
+  document.getElementById(pageId).classList.remove('hidden');
+  currentPage = pageId;
+  document.querySelectorAll('.nav-link').forEach(l => l.classList.toggle('active', l.dataset.page === pageId));
+}
+
+function hidePage(pageId) { if (pageId) document.getElementById(pageId).classList.add('hidden'); }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Catalog
+// ═══════════════════════════════════════════════════════════════════════════════
+async function loadItems() {
+  const grid = document.getElementById('catalogGrid');
+  grid.innerHTML = '<div class="empty-state"><div class="spinner"></div><p style="margin-top:8px">Loading inventory…</p></div>';
+
+  try {
+    const wsP = waitForEvent('items_response', 15000);
+    await api('GET', '/items/', null, S.token);
+    const msg = await wsP;
+    S.items = msg.payload.items || [];
+    document.getElementById('catalogCount').textContent = `${S.items.length} items`;
+    renderCatalog();
+  } catch (err) {
+    grid.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><h3>Error</h3><p>${err.message}</p></div>`;
+  }
+}
+
+function renderCatalog() {
+  const grid = document.getElementById('catalogGrid');
+  if (S.items.length === 0) {
+    grid.innerHTML = '<div class="empty-state"><div class="icon">📦</div><h3>No items available</h3></div>';
+    return;
+  }
+  grid.innerHTML = S.items.map(item => `
+    <div class="card">
+      <h3>${esc(item.name || item.itemId)}</h3>
+      <div class="meta">${esc(item.itemId)}</div>
+      <div class="price">$${item.price.toFixed(2)}</div>
+      <div class="stock ${item.stock < 5 ? 'low' : ''}">${item.stock} in stock</div>
+      <div class="card-actions">
+        <button class="btn btn-sm btn-primary" onclick="addToCart('${item.itemId}')" ${item.stock < 1 ? 'disabled' : ''}>
+          ${item.stock < 1 ? 'Out of Stock' : 'Add to Cart'}
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Cart
+// ═══════════════════════════════════════════════════════════════════════════════
+function addToCart(itemId) {
+  const item = S.items.find(i => i.itemId === itemId);
+  if (!item) return;
+  const existing = S.cart.find(c => c.itemId === itemId);
+  if (existing) existing.quantity++;
+  else S.cart.push({ itemId: item.itemId, name: item.name || item.itemId, price: item.price, quantity: 1 });
+  updateCartBadge();
+  showToast('success', '🛒', 'Added to Cart', `${item.name || item.itemId}`);
+}
+
+function removeFromCart(itemId) {
+  S.cart = S.cart.filter(c => c.itemId !== itemId);
+  updateCartBadge();
+  renderCart();
+}
+
+function updateCartBadge() {
+  const badge = document.getElementById('cartBadge');
+  if (badge) {
+    const count = S.cart.reduce((a, c) => a + c.quantity, 0);
+    badge.textContent = count;
+    badge.classList.toggle('hidden', count === 0);
+  }
+}
+
+function renderCart() {
+  const list = document.getElementById('cartList');
+  const empty = document.getElementById('cartEmpty');
+  const checkout = document.getElementById('cartCheckout');
+  const divider = document.getElementById('cartDivider');
+
+  if (S.cart.length === 0) {
+    list.innerHTML = '';
+    empty.classList.remove('hidden');
+    checkout.classList.add('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+  checkout.classList.remove('hidden');
+
+  const total = S.cart.reduce((a, c) => a + c.price * c.quantity, 0);
+  document.getElementById('cartTotal').textContent = total.toFixed(2);
+  document.getElementById('cartItemCount').textContent = `${S.cart.length} item(s)`;
+
+  list.innerHTML = S.cart.map(c => `
+    <div class="order-card">
+      <div class="order-info">
+        <div class="order-id">${esc(c.name)}</div>
+        <div class="order-meta">${c.itemId} · Qty: ${c.quantity} · $${(c.price * c.quantity).toFixed(2)}</div>
+      </div>
+      <button class="btn btn-sm btn-outline" onclick="removeFromCart('${c.itemId}')" style="color:var(--red);border-color:var(--red);">Remove</button>
+    </div>
+  `).join('');
+}
+
+// Navigate to cart page triggers render
+const origNav = navigate;
+navigate = function(pageId) {
+  origNav(pageId);
+  if (pageId === 'pageCart') renderCart();
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Place Order
+// ═══════════════════════════════════════════════════════════════════════════════
+async function placeOrder() {
+  if (S.cart.length === 0) return;
+  const dest = document.getElementById('cartDest').value.trim();
+  if (!dest) { showToast('error', '⚠️', 'Missing Destination', 'Enter a delivery address'); return; }
+
+  const itemList = S.cart.map(c => ({ itemId: c.itemId, quantity: c.quantity, price: c.price }));
+
+  try {
+    // 1. Create order
+    const intentP = waitForEvent('payment_intent_created', 20000);
+    const { status } = await api('POST', '/order/', { itemList, destination: dest }, S.token);
+    if (status !== 200) throw new Error('Failed to create order');
+
+    showToast('info', '⏳', 'Order Submitted', 'Waiting for payment intent…');
+    const intentMsg = await intentP;
+    const orderId = intentMsg.payload.orderId;
+    const clientSecret = intentMsg.payload.clientSecret;
+
+    // 2. Confirm order (auto-confirm with payment token)
+    const paymentP = waitForAny(['payment_completed', 'payment_failed'], 35000);
+    showToast('info', '💳', 'Processing Payment', `Order ${orderId}`);
+
+    await api('PATCH', '/order/', {
+      orderId, status: 'order_confirmed',
+      data: { paymentToken: `${clientSecret}-token` },
+    }, S.token);
+
+    const payMsg = await paymentP;
+    if (payMsg.payload.event === 'payment_completed') {
+      S.orders.push({ orderId, status: 'payment_completed', itemList, destination: dest });
+      S.cart = [];
+      updateCartBadge();
+      renderCart();
+      showToast('success', '✅', 'Order Placed!', `Order ${orderId} — Payment confirmed`);
+    } else {
+      showToast('error', '❌', 'Payment Failed', payMsg.payload.reason || 'Unknown error');
+    }
+  } catch (err) {
+    showToast('error', '⚠️', 'Order Error', err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  View Orders
+// ═══════════════════════════════════════════════════════════════════════════════
+async function loadOrders() {
+  const list = document.getElementById('ordersList');
+  const empty = document.getElementById('ordersEmpty');
+  list.innerHTML = '<div style="padding:20px;text-align:center"><div class="spinner"></div></div>';
+  empty.classList.add('hidden');
+
+  try {
+    const wsP = waitForEvent('order_query_response', 20000);
+    await api('GET', '/order/', null, S.token);
+    const msg = await wsP;
+    const orders = msg.payload.orders || [];
+    if (orders.length === 0) { list.innerHTML = ''; empty.classList.remove('hidden'); return; }
+
+    list.innerHTML = orders.map(o => `
+      <div class="order-card">
+        <div class="order-info">
+          <div class="order-id">${esc(o.orderId)}</div>
+          <div class="order-meta">${o.itemList ? o.itemList.length + ' item(s)' : ''} ${o.destination ? '· ' + esc(o.destination) : ''}</div>
+        </div>
+        <span class="order-status ${statusBadgeClass(o.status)}">${formatStatus(o.status)}</span>
+        <button class="btn btn-sm btn-outline" onclick="document.getElementById('trackOrderId').value='${o.orderId}';navigate('pageTracking');trackDelivery();">Track</button>
+      </div>
+    `).join('');
+  } catch (err) {
+    list.innerHTML = `<div class="empty-state"><p>Error: ${err.message}</p></div>`;
+  }
+}
+
+function statusBadgeClass(s) {
+  if (!s) return 'badge-blue';
+  if (s.includes('completed') || s.includes('delivered')) return 'badge-green';
+  if (s.includes('failed') || s.includes('rejected')) return 'badge-red';
+  if (s.includes('pending') || s.includes('pickup')) return 'badge-yellow';
+  if (s.includes('confirmed') || s.includes('reserved')) return 'badge-purple';
+  return 'badge-blue';
+}
+
+function formatStatus(s) { return s ? s.replace(/_/g, ' ') : 'unknown'; }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Delivery Tracking
+// ═══════════════════════════════════════════════════════════════════════════════
+async function trackDelivery() {
+  const orderId = document.getElementById('trackOrderId').value.trim();
+  if (!orderId) { showToast('error', '⚠️', 'Missing Order ID', ''); return; }
+
+  document.getElementById('trackingResult').classList.add('hidden');
+
+  try {
+    const wsP = waitForDeliveryStatus(orderId, 20000);
+    await api('GET', `/deliveries/?orderId=${encodeURIComponent(orderId)}`, null, S.token);
+    const msg = await wsP;
+
+    document.getElementById('trackOrderLabel').textContent = `Order: ${orderId}`;
+    const timeline = document.getElementById('trackTimeline');
+    const ds = msg.payload.deliveryStatus;
+
+    if (msg.payload.error) {
+      timeline.innerHTML = `<div style="color:var(--red);font-size:13px;">⚠️ ${esc(msg.payload.error)}</div>`;
+    } else {
+      const steps = ['ready_for_pickup', 'on_route', 'delivered'];
+      const stepLabels = { ready_for_pickup: 'Ready for Pickup', on_route: 'On Route', delivered: 'Delivered' };
+      const currentIdx = steps.indexOf(ds);
+      timeline.innerHTML = steps.map((step, i) => `
+        <div class="timeline-item ${i < currentIdx ? 'done' : i === currentIdx ? 'active' : ''}">
+          <div class="tl-label">${stepLabels[step] || formatStatus(step)}</div>
+        </div>
+      `).join('');
+      if (currentIdx === -1 && ds) {
+        timeline.innerHTML += `<div style="margin-top:8px;font-size:13px;color:var(--text-muted);">Current status: <strong>${formatStatus(ds)}</strong></div>`;
+      }
+    }
+    document.getElementById('trackingResult').classList.remove('hidden');
+  } catch (err) {
+    showToast('error', '⚠️', 'Tracking Error', err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Driver: Request Deliveries
+// ═══════════════════════════════════════════════════════════════════════════════
+async function requestDeliveries() {
+  const count = parseInt(document.getElementById('pickupCount').value) || 1;
+  const stopsEl = document.getElementById('routeStops');
+  const emptyEl = document.getElementById('routeEmpty');
+  stopsEl.innerHTML = '<div style="padding:20px;text-align:center"><div class="spinner"></div> Requesting route…</div>';
+  emptyEl.classList.add('hidden');
+
+  try {
+    const wsP = waitForEvent('driver_route', 45000);
+    const { status } = await api('POST', '/deliveries/', { count }, S.token);
+    if (status !== 200) throw new Error(`Expected 200, got ${status}`);
+
+    const msg = await wsP;
+    S.routeStops = msg.payload.route || [];
+    if (S.routeStops.length === 0) {
+      stopsEl.innerHTML = '';
+      emptyEl.classList.remove('hidden');
+      emptyEl.querySelector('p').textContent = 'No pending deliveries available';
+      return;
+    }
+
+    stopsEl.innerHTML = S.routeStops.map((stop, i) => `
+      <div class="route-stop">
+        <div class="stop-num">${i + 1}</div>
+        <div class="stop-info">
+          <div class="stop-order">${esc(stop.orderId)}</div>
+          <div class="stop-loc">📍 ${esc(stop.location || 'Unknown')}</div>
+        </div>
+        <button class="btn btn-sm btn-green" onclick="prefillManage('${stop.orderId}')">Complete</button>
+        <button class="btn btn-sm btn-outline" onclick="prefillManage('${stop.orderId}');navigate('pageManage');" style="color:var(--red);">Reject</button>
+      </div>
+    `).join('');
+  } catch (err) {
+    stopsEl.innerHTML = `<div class="empty-state"><p style="color:var(--red);">${err.message}</p></div>`;
+  }
+}
+
+function prefillManage(orderId) {
+  document.getElementById('manageOrderId').value = orderId;
+  navigate('pageManage');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Driver: Complete / Reject
+// ═══════════════════════════════════════════════════════════════════════════════
+async function completeDelivery() {
+  const orderId = document.getElementById('manageOrderId').value.trim();
+  const sigUrl = document.getElementById('manageSigUrl').value.trim();
+  if (!orderId) { showToast('error', '⚠️', 'Missing Order ID', ''); return; }
+  if (!sigUrl) { showToast('error', '⚠️', 'Missing Signature URL', 'Required for completion'); return; }
+
+  try {
+    const wsP = waitForDeliveryStatus(orderId, 20000);
+    const { status } = await api('PATCH', '/deliveries/', { orderId, status: 'completed', signatureUrl: sigUrl }, S.token);
+    if (status !== 200) throw new Error(`Expected 200, got ${status}`);
+
+    const msg = await wsP;
+    showResult('manageResult', 'success', `✅ Delivery ${orderId} marked as <strong>${msg.payload.deliveryStatus}</strong>`);
+  } catch (err) {
+    showResult('manageResult', 'error', `❌ ${err.message}`);
+  }
+}
+
+async function rejectDelivery() {
+  const orderId = document.getElementById('manageOrderId').value.trim();
+  if (!orderId) { showToast('error', '⚠️', 'Missing Order ID', ''); return; }
+
+  try {
+    const wsP = waitForDeliveryStatus(orderId, 20000);
+    const { status } = await api('PATCH', '/deliveries/', { orderId, status: 'rejected' }, S.token);
+    if (status !== 200) throw new Error(`Expected 200, got ${status}`);
+
+    const msg = await wsP;
+    showResult('manageResult', 'success', `🚫 Delivery ${orderId} marked as <strong>${msg.payload.deliveryStatus}</strong>`);
+  } catch (err) {
+    showResult('manageResult', 'error', `❌ ${err.message}`);
+  }
+}
+
+function showResult(elId, type, html) {
+  const el = document.getElementById(elId);
+  el.classList.remove('hidden');
+  el.innerHTML = `<div class="card" style="border-left:3px solid var(--${type === 'success' ? 'green' : 'red'});">${html}</div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Helpers
+// ═══════════════════════════════════════════════════════════════════════════════
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+// Auto-navigate to orders page after visiting it
+const _origNav2 = navigate;
+navigate = function(pageId) {
+  _origNav2(pageId);
+  if (pageId === 'pageOrders') loadOrders();
+};
+</script>
+</body>
+</html>
