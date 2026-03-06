@@ -17,6 +17,9 @@ As a client, I want to receive real-time updates on the delivery status so that 
 
 \paragraph{Business Details}
 Any authenticated user (client or driver) can query the current delivery status of a specific order at any time. The system looks up the reservation record in the WMS legacy system and returns the current delivery status to the requester via WebSocket.
+
+The business logic diagram is in figure \ref{fig:delivery_status-business}.
+
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth, height=0.7\textheight, keepaspectratio]{figures/delivery_status-business.png}
@@ -24,7 +27,12 @@ Any authenticated user (client or driver) can query the current delivery status 
     \label{fig:delivery_status-business}
 \end{figure}
 
+\newpage
+
 \paragraph{Implementation Details}
+
+The implementation diagram is in figure \ref{fig:delivery_status-implementation}.
+
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth, height=0.7\textheight, keepaspectratio]{figures/delivery_status-implementation.png}

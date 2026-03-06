@@ -18,6 +18,9 @@ As a driver, I want to pick up an assigned order so that I can begin the deliver
 
 \paragraph{Business Details}
 The driver requests a batch of delivery assignments. The system retrieves the oldest pending delivery order from the CMS, builds a multi-stop optimised route by finding geographically nearby pending orders from an in-memory route index, marks all selected orders as collected, and pushes the ordered route to the driver via WebSocket.
+
+The business logic diagram is in figure \ref{fig:delivery-business}.
+
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth, height=0.7\textheight, keepaspectratio]{figures/delivery-business.png}
@@ -25,7 +28,12 @@ The driver requests a batch of delivery assignments. The system retrieves the ol
     \label{fig:delivery-business}
 \end{figure}
 
+\newpage
+
 \paragraph{Implementation Details}
+
+The implementation diagram is in figure \ref{fig:delivery-implementation}.
+
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth, height=0.7\textheight, keepaspectratio]{figures/delivery-implementation.png}

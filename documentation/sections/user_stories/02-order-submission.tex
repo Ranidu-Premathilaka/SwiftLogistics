@@ -21,6 +21,9 @@ First, the client browses inventory; the system queries the WMS and returns the 
 Second, the client creates an order with a chosen item list; the system registers the order in the CMS legacy system and creates a payment intent, returning a clientSecret to the client via WebSocket.
 Third, the client confirms the order using the clientSecret as the payment token; the system updates the CMS order status, reserves stock in WMS, and charges payment in sequence.
 If all steps succeed the order is marked pending delivery the client is notified; on payment decline or insufficient stock, compensating events roll back the reservation and the client is notified of the specific failure.
+
+The business logic diagram is in figure \ref{fig:order-business}.
+
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth, height=0.7\textheight, keepaspectratio]{figures/order-business.png}
@@ -28,7 +31,12 @@ If all steps succeed the order is marked pending delivery the client is notified
     \label{fig:order-business}
 \end{figure}
 
+\newpage
+
 \paragraph{Implementation Details}
+
+The implementation diagram is in figure \ref{fig:order-implementation}.
+
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth, height=0.8\textheight, keepaspectratio]{figures/order-implementation.png}

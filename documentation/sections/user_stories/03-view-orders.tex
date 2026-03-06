@@ -16,6 +16,9 @@ As a client, I want to view my existing orders so that I can track the status an
 
 \paragraph{Business Details}
 The client requests a list of their orders. The system queries the CMS legacy system for all orders belonging to that client and returns the full order list to the client in real time via WebSocket.
+
+The business logic diagram is in figure \ref{fig:view_orders-business}.
+
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth, height=0.7\textheight, keepaspectratio]{figures/view_orders-business.png}
@@ -23,7 +26,12 @@ The client requests a list of their orders. The system queries the CMS legacy sy
     \label{fig:view_orders-business}
 \end{figure}
 
+\newpage
+
 \paragraph{Implementation Details}
+
+The implementation diagram is in figure \ref{fig:view_orders-implementation}.
+
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth, height=0.7\textheight, keepaspectratio]{figures/view_orders-implementation.png}

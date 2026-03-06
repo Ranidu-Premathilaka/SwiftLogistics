@@ -21,18 +21,24 @@ During login, the client submits credentials; the system validates them and retu
 All subsequent requests carry the access token, which the gateway validates before routing each request internally.
 When the access token expires, the client can refresh it by exchanging a valid refresh token for a new access token without re-authenticating.
 
+The business logic diagram is in figure \ref{fig:auth-business}.
+
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\textwidth, height=0.7\textheight, keepaspectratio]{figures/auth-business.png}
+    \includegraphics[width=\textwidth, height=0.9\textheight, keepaspectratio]{figures/auth-business.png}
     \caption{Business Diagram for Client Authentication}
     \label{fig:auth-business}
 \end{figure}
 
+\newpage
+
 \paragraph{Implementation Details}
+
+The implementation diagram is in figure \ref{fig:auth-implementation}.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\textwidth, height=0.7\textheight, keepaspectratio]{figures/auth-implementation.png}
+    \includegraphics[width=\textwidth, height=0.9\textheight, keepaspectratio]{figures/auth-implementation.png}
     \caption{Implementation Diagram for Client Authentication}
     \label{fig:auth-implementation}
 \end{figure}
