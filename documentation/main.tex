@@ -1,7 +1,7 @@
 \documentclass[12pt,a4paper]{article}
 
-
 % Essential Packages
+\usepackage{lmodern}
 \usepackage[utf8]{inputenc}
 \usepackage[margin=1in]{geometry}
 \usepackage{hyperref}
@@ -9,8 +9,24 @@
 \usepackage{listings}
 \usepackage{xcolor}
 
+% Listings configuration
+\lstset{
+    basicstyle=\small\ttfamily,
+    breaklines=true,
+    breakatwhitespace=true,
+    showstringspaces=false,
+    frame=single,
+    captionpos=b,
+    tabsize=2
+}
+\lstdefinelanguage{JSON}{
+    morestring=[b]",
+    morecomment=[l]{//},
+    morekeywords={true,false,null}
+}
+
 \newif\ifdraft
-\drafttrue 
+\draftfalse
 
 \ifdraft
   \usepackage[draft]{graphicx}
@@ -26,12 +42,12 @@
 }
 \author{
     Team Members: \\
-    23000831 - K H H A Kalatuwawa \\
     23001496 - A V A R L Premathilake \\
+    23000831 - K H H A Kalatuwawa \\
+    23000716 - D R Jayasinghe \\
     23001623 - U H N Rodrigo \\
     23001384 - S R A Patabedi \\
-    Index Number 5 - Name 5 \\
-    Index Number 6 - Name 6
+    23000023 - A P Abeysundara
 }
 \date{\today}
 
@@ -43,8 +59,6 @@
 \tableofcontents
 \newpage
 
-\listoffigures
-\newpage
 
 % Main content sections
 \input{sections/introduction}
@@ -59,18 +73,18 @@
 \input{sections/architectural_patterns}
 \newpage
 
-\input{sections/technology_stack}
-\newpage
-
 \input{sections/prototype}
-\newpage
-
-\input{sections/security}
 \newpage
 
 \input{sections/challenges}
 \newpage
 
-\input{sections/conclusion}
+\input{sections/security}
+\newpage
+
+\input{sections/technology_stack}
+\newpage
+
+
 
 \end{document}

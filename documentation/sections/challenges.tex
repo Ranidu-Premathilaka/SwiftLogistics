@@ -1,230 +1,92 @@
 \section{Addressing Architectural Challenges}
-\label{sec:challenges}
-
-% Detailed discussion of how each challenge is addressed
-
 \subsection{Overview}
-% Brief recap of challenges from assignment
-% How architecture addresses each challenge
+
+Though most of these challenges are addressed and explained in the previous sections, this section will provide a consolidated view on how we have addressed these challenges in our architecture.
 
 \subsection{Challenge 1: Heterogeneous Systems Integration}
-\label{subsec:challenge1}
 
-\subsubsection{Problem Description}
-% CMS (SOAP/XML), ROS (REST/JSON), WMS (TCP/IP proprietary)
-% Protocol and data format differences
-% Integration complexity
+\subsubsection{Solution}
 
-\subsubsection{Solution Approach}
-% Adapter pattern implementation
-% Message translator pattern
-% Protocol translation mechanisms
-% Data format transformation
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{figures/heterogeneous_integration.pdf}
-    \caption{Heterogeneous Systems Integration Solution}
-    \label{fig:hetero_integration}
-\end{figure}
-
-\subsubsection{Implementation Details}
-% CMS Adapter: SOAP client libraries
-% ROS Adapter: REST client with JSON parsing
-% WMS Adapter: Custom TCP/IP socket implementation
-% Unified internal message format
+Each legacy system is wrapped in a dedicated adapter container (the Adapter pattern, described in Section~\ref{subsec:integration_patterns}). The adapter is the only component that knows the native protocol of its system. All other services interact with the adapter exclusively through AMQP events. If a legacy system changes its interface, only its adapter needs to change.
 
 \subsubsection{Benefits Achieved}
-% Loose coupling between systems
-% Flexibility to add new systems
-% Centralized translation logic
+
+\begin{itemize}
+    \item Protocol changes in any legacy system require modifying only its adapter container, leaving all other services unchanged.
+    \item Adding a new integration (e.g.\ a GPS tracking service) requires only a new adapter to interface with the message broker with no changes to existing services.
+\end{itemize} 
 
 \subsection{Challenge 2: Real-time Tracking and Notifications}
 \label{subsec:challenge2}
 
-\subsubsection{Problem Description}
-% Immediate updates when driver marks package delivered
-% Real-time route changes to drivers
-% Push notifications requirement
+\subsubsection{Solution}
 
-\subsubsection{Solution Approach}
-% Event-driven architecture
-% WebSocket connections for real-time updates
-% Publish-subscribe pattern for event broadcasting
-% Push notification service integration
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{figures/realtime_solution.pdf}
-    \caption{Real-time Tracking Solution Architecture}
-    \label{fig:realtime_solution}
-\end{figure}
-
-\subsubsection{Implementation Details}
-% WebSocket server in API Gateway
-% Event publishers in each service
-% Subscriber clients (portal and mobile app)
-% Message broker for event distribution
+The Notify Service runs a WebSocket server and subscribes to all \texttt{notify.*} routing keys. Any service that needs to notify a user publishes to that with info such as the userid, payload, etc. While online users receive a the data immediately through the websocket offline users messages will be stored and delivered on reconnect(Only if the notification isn't time critial if so the message is dropped). By using this services can send out real-time updates when for example if a driver picks up an order to notify the according users by sending these events out.
 
 \subsubsection{Benefits Achieved}
-% Immediate status updates
-% Improved user experience
-% Reduced polling overhead
 
-\subsection{Challenge 3: High-Volume Asynchronous Processing}
-\label{subsec:challenge3}
+\begin{itemize}
+    \item The architecture uses no polling, reducing both client and service-side handling overhead.
+    \item Offline clients do not miss persistent notifications and ensures delivery on reconnect.
+    \item The per-instance unique queue design allows the Notify Service to be scaled horizontally without any code change to message producers.
+\end{itemize}
 
-\subsubsection{Problem Description}
-% Order spikes during sales events
-% Time-consuming operations (route optimization)
-% Non-blocking requirement for client portal
+\subsection{Challenge 3: High-Volume, Asynchronous Processing}
 
-\subsubsection{Solution Approach}
-% Message broker for asynchronous communication
-% Queue-based processing
-% Competing consumers pattern
-% Load balancing across service instances
+\subsubsection{Solution}
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{figures/async_processing.pdf}
-    \caption{Asynchronous Processing Architecture}
-    \label{fig:async_processing}
-\end{figure}
-
-\subsubsection{Implementation Details}
-% Message queues for order processing
-% Worker services consuming from queues
-% Auto-scaling based on queue depth
-% Backpressure handling
+Once a order submission or any high processing request is received the system will send a response to the client immediately and then the saga for that particular task will start using events through the message broker. Once the saga is completed either successfully or with a failure the system will send back the result through the webscocket to the client referencing its' idempotency key.
 
 \subsubsection{Benefits Achieved}
-% Responsive UI during high load
-% Horizontal scalability
-% System stability under load
+
+\begin{itemize}
+    \item The portal is always responsive, as responses are returned before any backend processing begins.
+    \item The message broker's atleast once delivery guarantee ensures no event is lost during high loads where messages are queued until the system is ready to process them.
+    \item The system can scale horizontally to handle increased load with no code changes.
+\end{itemize}
 
 \subsection{Challenge 4: Transaction Management}
 \label{subsec:challenge4}
 
-\subsubsection{Problem Description}
-% Distributed transaction across CMS, WMS, ROS
-% Ensuring consistency
-% Handling partial failures
-% Recovery mechanisms
+\subsubsection{Solution}
 
-\subsubsection{Solution Approach}
-% Saga pattern for distributed transactions
-% Compensating transactions
-% Event sourcing for audit trail
-% Idempotent operations
+The choreography-based Saga pattern is used where each service performs a local transaction and publishes an event. The next service in the chain reacts to that event. On failure, the failing service publishes a compensating event that triggers rollback in already-completed services thus no central coordinator is required. These events are published with the same idempotency key allowing the entire transaction flow to be traced through with context. Examples of these transactions are listed in Section~\ref{subsec:user_stories}
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{figures/transaction_management.pdf}
-    \caption{Distributed Transaction Management with Saga Pattern}
-    \label{fig:transaction_mgmt}
-\end{figure}
-
-\subsubsection{Implementation Details}
-% Saga orchestrator service
-% Compensation handlers for rollback
-% Transaction state machine
-% Step-by-step transaction flow:
-%   1. Order received
-%   2. CMS creates order record
-%   3. WMS reserves package slot
-%   4. ROS adds to route
-%   5. All steps committed or compensated
-
-\subsubsection{Recovery Scenarios}
-% Scenario 1: CMS failure (no compensation needed)
-% Scenario 2: WMS failure (compensate CMS)
-% Scenario 3: ROS failure (compensate WMS and CMS)
-% Scenario 4: Network partition handling
 
 \subsubsection{Benefits Achieved}
-% Eventual consistency
-% No lost orders
-% Graceful failure handling
-% Audit trail for all transactions
+
+\begin{itemize}
+    \item No two-phase commit or distributed lock is required.
+    \item The system reaches eventual consistency across CMS, WMS, and Payment even when one service temporarily fails.
+    \item Compensating events provide a clean rollback path that is verifiable by inspecting routing key sequences.
+\end{itemize}
 
 \subsection{Challenge 5: Scalability and Resilience}
 \label{subsec:challenge5}
 
-\subsubsection{Problem Description}
-% Growing number of clients, drivers, deliveries
-% Component failures inevitable
-% Need for system to self-heal
+\subsubsection{Solution}
 
-\subsubsection{Solution Approach}
-% Microservices for independent scaling
-% Containerization and orchestration
-% Health checks and auto-restart
-% Circuit breaker pattern
-% Load balancing
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{figures/scalability_resilience.pdf}
-    \caption{Scalability and Resilience Architecture}
-    \label{fig:scalability}
-\end{figure}
-
-\subsubsection{Implementation Details}
-% Kubernetes for container orchestration
-% Horizontal Pod Autoscaler (HPA)
-% Service mesh for traffic management
-% Circuit breakers with Hystrix/Resilience4j
-% Retry policies and timeouts
-% Bulkhead pattern for resource isolation
+Each of the containers is independently deployable and scalable horizontally. Durable RabbitMQ queues buffer messages when a consumer is temporarily unavailable. For production, Kubernetes would provide automatic scale-out based on queue depth or CPU usage.
 
 \subsubsection{Benefits Achieved}
-% Independent component scaling
-% Auto-recovery from failures
-% Graceful degradation
-% High availability
+
+\begin{itemize}
+    \item A single container failure does not cause data loss because durable queues hold unprocessed messages until the container restarts.
+    \item The \texttt{restart: unless-stopped} policy provides automatic recovery without operator intervention.
+    \item Each service scales independently, so peak order processing capacity can be increased without affecting Auth or Payment services.
+\end{itemize}
 
 \subsection{Challenge 6: Security}
 \label{subsec:challenge6}
 
-\subsubsection{Problem Description}
-% Secure communication requirements
-% Protection of sensitive data
-% External API security (ROS)
+\subsubsection{Solution}
 
-\subsubsection{Solution Approach}
-% Detailed in Section~\ref{sec:security}
-% TLS for all communications
-% Authentication and authorization
-% API Gateway security features
+The API Gateway enforces all requests to go through it where it only exposes the nessassary services to outside. There JWT verification is done at the gateway level making sure that only authorized users are allowed in the system. the /auth endpoint is allowed without token verification where it's the sole service that handles user registration and login. Security design is explained in more detail in Section~\ref{sec:security}.
 
 \subsubsection{Benefits Achieved}
-% Secure data transmission
-% Controlled access
-% Protected external integrations
 
-\subsection{Summary}
-% Table summarizing challenge-solution mapping
+\begin{itemize}
+    \item A compromised client token cannot be used to call internal services directly because no internal port is reachable from outside.
+    \item Centralising authentication at the API Gateway reduces the security audit surface to a single service.
+\end{itemize}
 
-\begin{table}[H]
-    \centering
-    \caption{Challenge-Solution Mapping}
-    \label{tab:challenge_solution}
-    \begin{tabular}{|p{4cm}|p{5cm}|p{5cm}|}
-        \hline
-        \textbf{Challenge} & \textbf{Solution} & \textbf{Key Pattern/Technology} \\
-        \hline
-        Heterogeneous Integration & Adapter services & Message Translator Pattern \\
-        \hline
-        Real-time Updates & Event-driven architecture & Pub-Sub Pattern, WebSocket \\
-        \hline
-        High-Volume Processing & Asynchronous messaging & Message Broker, Queues \\
-        \hline
-        Transaction Management & Saga pattern & Compensating Transactions \\
-        \hline
-        Scalability & Microservices & Kubernetes, Auto-scaling \\
-        \hline
-        Security & Multiple layers & TLS, OAuth, API Gateway \\
-        \hline
-    \end{tabular}
-\end{table}

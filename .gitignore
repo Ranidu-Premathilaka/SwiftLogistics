@@ -1,8 +1,6 @@
 # documentation compiled files
 .gitignore
-documentation/compiled/*
+documentation/compiled
 node_modules/
 source-code/services/.DS_Store
 start.sh
-documentation/
-!documentation/main.tex

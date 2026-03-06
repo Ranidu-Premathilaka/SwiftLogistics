@@ -1,112 +1,26 @@
 \section{Proposed Architecture}
-\label{sec:architecture}
 
-% Main architecture section covering conceptual and implementation views: 
-% Microservices
-% API Gateway 
-% REST 
-% Async
-% Event-driven
-% Service mesh
+The SwiftTrack platform is implemented as an event-driven microservices architecture. These services communicate asynchronously through the message broker. All external traffic enters through an API Gateway and no internal service is reachable from outside.
 
-\subsection{Conceptual Architecture}
-\label{subsec:conceptual}
-% High-level overview of the architecture
-% Main components and their responsibilities
-% Communication flows between components
+% Add an overall architecture section instead
+\subsection{Proposed Architecture}
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\textwidth]{figures/conceptual_architecture.pdf}
-    \caption{Conceptual Architecture Diagram}
-    \label{fig:conceptual_arch}
+    \includegraphics[width=\textwidth]{figures/proposed_architecture.png}
+    \caption{Proposed Architecture Diagram}
+    \label{fig:proposed_arch}
 \end{figure}
 
-% Description of:
-%   - Client Portal (Web)
-%   - Driver Mobile App
-%   - API Gateway
-%   - Enterprise Service Bus (ESB) / Message Broker
-%   - Service Adapters (CMS, ROS, WMS)
-%   - Backend Systems (CMS, ROS, WMS)
+HTTP requests travel from the client through the API Gateway which then routes to the services, which returns an immediate acknowledgement of the idemportency key. Asynchronous AMQP messages travel between these services and adapters via the message broker, with each adapter performing the necessary protocol translation before calling its legacy system. After the Saga is completed, Real-time WebSocket frames travel from the Notify Service, through the API Gateway WebSocket proxy, to the connected client or driver.
 
-\subsection{Implementation Architecture}
-\label{subsec:implementation}
-% Detailed implementation view
-% Specific technologies and frameworks
-% Deployment considerations
+\subsection{User story based implementation}
+\label{subsec:user_stories}
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{figures/implementation_architecture.pdf}
-    \caption{Implementation Architecture Diagram}
-    \label{fig:impl_arch}
-\end{figure}
+\input{sections/user_stories/01-client-authentication.tex}
+\input{sections/user_stories/02-order-submission.tex}
+\input{sections/user_stories/03-view-orders.tex}
+\input{sections/user_stories/04-driver-pickup-order.tex}
+\input{sections/user_stories/05-delivery-status.tex}
+\input{sections/user_stories/06-driver-order-completion.tex}
 
-% Description of:
-%   - API Gateway technology: JavaScript / HTTP-Proxy
-%   - Message broker implementation: RabbitMQ
-%   - Service adapter implementations: SOAP client for CMS, REST client for ROS, TCP/IP socket for WMS
-%   - Database systems: PostgreSQL
-%   - Container orchestration: Docker Swarm
-
-\subsection{Component Descriptions}
-\label{subsec:components}
-% Detailed description of each architectural component
-
-\subsubsection{Client Portal}
-% Web-based interface for e-commerce clients: user interface not implemented in prototype
-% Technologies: React/Angular/Vue
-% Key features and responsibilities
-
-\subsubsection{Driver Mobile Application}
-% Mobile app for delivery drivers: user interface not implemented in prototype
-% Technologies: Any platform that can utilize a REST API
-% Key features and responsibilities
-
-\subsubsection{API Gateway}
-% Central entry point for all client requests
-% Technologies: JavaScript / HTTP-Proxy
-% Responsibilities: routing, authentication
-
-\subsubsection{Message Broker}
-% Asynchronous communication hub
-% Technologies: RabbitMQ
-% Publish-subscribe patterns
-% Queue management
-
-\subsubsection{Service Adapters}
-% Protocol and data format translation
-% CMS Adapter (SOAP to internal format)
-% ROS Adapter (REST to internal format)
-% WMS Adapter (TCP/IP to internal format)
-
-\subsubsection{Service Registry and Discovery}
-% Dynamic service registration
-% Technologies: Consul/Eureka
-% Load balancing and health checks
-
-\subsubsection{Data Persistence Layer}
-% Database systems
-% Technologies: PostgreSQL/MongoDB
-% Data models and relationships
-
-\subsection{Deployment Architecture}
-\label{subsec:deployment}
-% How components are deployed
-% Containerization strategy
-% Orchestration with Docker Swarm
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{figures/deployment_diagram.pdf}
-    \caption{Deployment Architecture Diagram}
-    \label{fig:deployment}
-\end{figure}
-
-\subsection{Rationale for Final Architecture}
-\label{subsec:rationale}
-% Justification for the chosen architecture: flexibility, scalability, maintainability
-% Why this approach best addresses the requirements: loose coupling, using adapters to translate protocols and data formats, asynchronous communication
-% Trade-offs and benefits: complexity vs. modularity, development effort vs. long-term maintainability
-% Comparison with alternatives (reference to Section~\ref{sec:alternative_architectures})

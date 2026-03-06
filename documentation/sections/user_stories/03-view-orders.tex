@@ -1,0 +1,33 @@
+\subsubsection{User Story 3: View Orders}
+
+% TODO: Add content
+
+\paragraph{Description}
+As a client, I want to view my existing orders so that I can track the status and details of my deliveries.
+
+\paragraph{Actors}
+\begin{itemize}
+    \item Client
+    \item API Gateway
+    \item Order Service
+\end{itemize}
+
+\paragraph{Sequence Diagram}
+
+\paragraph{Business Details}
+The client requests a list of their orders. The system queries the CMS legacy system for all orders belonging to that client and returns the full order list to the client in real time via WebSocket.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth, height=0.7\textheight, keepaspectratio]{figures/view_orders-business.png}
+    \caption{Business Diagram for View Orders} 
+    \label{fig:view_orders-business}
+\end{figure}
+
+\paragraph{Implementation Details}
+The client issues a GET /order request carrying a valid JWT. The API Gateway injects x-username and proxies to the Order Service. The Order Service publishes a cms.orders.requested AMQP event to the CMS adapter, which calls GetOrdersByUser on the SOAP interface with the clientId. The response is forwarded to the Notify Service, which pushes an order\_query\_response WebSocket message to the client containing each order's orderId, clientId, itemList, status, createdAt, and updatedAt fields.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth, height=0.7\textheight, keepaspectratio]{figures/view_orders-implementation.png}
+    \caption{Implementation Diagram for View Orders}
+    \label{fig:view_orders-implementation}
+\end{figure}

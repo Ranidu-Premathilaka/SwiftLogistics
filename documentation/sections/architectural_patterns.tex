@@ -1,155 +1,45 @@
 \section{Architectural and Integration Patterns}
-\label{sec:patterns}
-
-% Description of patterns used in the solution
-
 \subsection{Architectural Patterns}
-\label{subsec:arch_patterns}
-% Main architectural patterns employed
 
 \subsubsection{Microservices Architecture}
-% Description of microservices pattern
-% How it's applied in SwiftLogistics
-% Benefits for scalability and maintainability
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.9\textwidth]{figures/microservices_pattern.pdf}
-    \caption{Microservices Architecture Pattern}
-    \label{fig:microservices}
-\end{figure}
+Each business capability is deployed as an independently runnable and scalable container. The thirteen containers are grouped by role: client-facing services (Auth, Order, Items, Delivery, Notify), backend processors (Payment, Route), legacy adapters (CMS, ROS, WMS), and infrastructure (RabbitMQ, PostgreSQL). Each container has a single responsibility, allowing individual services to be redeployed or scaled without affecting the rest of the system.
 
 \subsubsection{Event-Driven Architecture}
-% Description of event-driven pattern
-% Event sourcing and CQRS if applicable
-% How events flow through the system
-% Benefits for real-time updates
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.9\textwidth]{figures/event_driven_pattern.pdf}
-    \caption{Event-Driven Architecture Pattern}
-    \label{fig:event_driven}
-\end{figure}
+Services communicate by publishing and consuming events rather than making direct synchronous calls to each other. For example every state change in the order lifecycle is expressed as a routing key published as \texttt{order.confirmed}, \texttt{order.wms.reserved}, \texttt{order.payment.completed}, and others. Producers have no knowledge of their consumers. Adding a new service that must react to an existing event requires only a new queue binding, with no change to any existing service. 
 
 \subsubsection{API Gateway Pattern}
-% Single entry point for clients
-% Request routing and aggregation
-% Cross-cutting concerns (auth, logging, rate limiting)
 
-\subsubsection{Service Mesh Pattern}
-% Service-to-service communication management
-% Technologies: Istio/Linkerd
-% Benefits for observability and security
+API gateway is used to handle three types of tasks each being, JWT token validation, identity propagation towards services and most importantly routing. It also acts as a WebSocket proxy for the Notify Service. By doing this backend processing internal services are not exposed to the outside world.
+
+\subsubsection{Service Descovery Pattern}
+
+Here we've taken utilization of docker's internal DNS for service discovery. Each service is registered with a stable hostname (e.g.\ \texttt{order-service}) and the API Gateway routes requests to these hostnames. By doing this on scenarios where multiple instances of the services are running, the internal docker DNS will automatically load balance requests according to round-robin. 
 
 \subsection{Integration Patterns}
 \label{subsec:integration_patterns}
-% Enterprise integration patterns used
 
-\subsubsection{Message Channel}
-% Point-to-point and publish-subscribe channels
-% How messages flow through channels
-% Channel types in SwiftLogistics
+\subsubsection{Pub-Sub Pattern}
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.9\textwidth]{figures/message_channel_pattern.pdf}
-    \caption{Message Channel Pattern}
-    \label{fig:message_channel}
-\end{figure}
+RabbitMQ is used as the message channel backbone. Two types of channels are in use: point-to-point channels, where routing keys follow a \texttt{receiver.sender.event} convention and each message is consumed by exactly one service, and state-change event channels, where routing keys such as \texttt{order.created} broadcast lifecycle events to any interested subscriber.
 
-\subsubsection{Message Translator}
-% Protocol translation (SOAP/REST/TCP-IP)
-% Data format transformation (XML/JSON/Binary)
-% Adapter implementations
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.9\textwidth]{figures/message_translator_pattern.pdf}
-    \caption{Message Translator Pattern}
-    \label{fig:translator}
-\end{figure}
+\subsubsection{Adapter Pattern}
 
-\subsubsection{Content-Based Router}
-% Routing messages based on content
-% Decision logic for message routing
-% Implementation in message broker
-
-\subsubsection{Request-Reply Pattern}
-% Synchronous communication pattern
-% Used for critical operations
-% Correlation identifiers
-
-\subsubsection{Publish-Subscribe Pattern}
-% Real-time updates distribution
-% Event broadcasting to multiple consumers
-% Used for driver notifications and client updates
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.9\textwidth]{figures/pubsub_pattern.pdf}
-    \caption{Publish-Subscribe Pattern}
-    \label{fig:pubsub}
-\end{figure}
-
-\subsubsection{Competing Consumers}
-% Load distribution across multiple instances
-% High-volume order processing
-% Scalability benefits
-
-\subsubsection{Dead Letter Channel}
-% Handling failed messages
-% Retry mechanisms
-% Error recovery
+Each legacy integration adapter (CMS, ROS, WMS) listens for events published on the message bus and translates them into the native protocol of its target system. This shields the rest of the platform from each system's specific interface, whether SOAP, REST, or TCP, presenting a uniform event-driven interface to all other services regardless of the underlying protocol.
 
 \subsubsection{Saga Pattern}
-% Distributed transaction management
-% Compensation mechanisms
-% Order processing saga example
+
+The system implements two choreography-based sagas: an order creation saga, which coordinates the CMS, WMS, and Payment services across the order lifecycle, and a delivery completion saga, which coordinates the WMS and Notify services when a driver marks an order as delivered. Each saga is driven entirely by events, with no central orchestrator. Figure~\ref{fig:saga} illustrates how the order creation saga progresses through its steps, including the compensating flow on payment failure.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\textwidth]{figures/saga_pattern.pdf}
-    \caption{Saga Pattern for Distributed Transactions}
+    \includegraphics[width=\textwidth, height=0.6\textheight, keepaspectratio]{figures/example_order_creation_saga_pattern.png}
+    \caption{Saga Pattern Example}
     \label{fig:saga}
 \end{figure}
 
-\subsection{Pattern Interaction and Composition}
-\label{subsec:pattern_composition}
-% How patterns work together
-% Example scenarios showing multiple patterns
+\subsubsection{Circuit Breaker Pattern}
 
-\subsubsection{Order Submission Flow}
-% Sequence diagram showing pattern interaction
-% From client submission to all systems updated
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{figures/order_flow_sequence.pdf}
-    \caption{Order Submission Sequence Diagram}
-    \label{fig:order_sequence}
-\end{figure}
-
-\subsubsection{Real-time Update Flow}
-% Pattern composition for real-time tracking
-% Event propagation from driver app to client portal
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{figures/realtime_update_sequence.pdf}
-    \caption{Real-time Update Sequence Diagram}
-    \label{fig:realtime_sequence}
-\end{figure}
-
-\subsection{Rationale for Pattern Selection}
-\label{subsec:pattern_rationale}
-% Why these specific patterns were chosen
-% How they address the architectural challenges:
-%   - Heterogeneous systems integration
-%   - Real-time tracking and notifications
-%   - High-volume asynchronous processing
-%   - Transaction management
-%   - Scalability and resilience
-%   - Security
-
-% Justification with reference to requirements from Section~\ref{sec:introduction}
+Each saga step includes a circuit breaker mechanism. If a service fails to respond within a configured timeout, the circuit breaker opens, preventing further attempts to call that service and preventing the start of that saga. A health check is done periodially to monitor if if the service is back alive closing back the circuit through event based publishing. Currently this implementation isn't reflected with the prototype but it is a critical part of the final implementation to ensure system resilience under failure conditions. 

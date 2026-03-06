@@ -1,160 +1,43 @@
 \section{Prototype Implementation}
 \label{sec:prototype}
 
-% Description of the implemented prototype
+The prototype implements the described architecture using containerised Node.js services. All core flows—order creation, delivery assignment, and real-time WebSocket notifications are operational. No client UI is included thus all interaction is through the integration test suite. The three legacy systems (CMS, ROS, WMS) are replaced by lightweight mock servers that replicate the same interfaces over SOAP, REST, and REST respectively.
 
-\subsection{Prototype Scope}
-\label{subsec:prototype_scope}
-% What was implemented as part of the prototype
-% Minimal implementation of CMS, ROS, and WMS mocks
-% Basic order submission flow
-% Simple client UI for demonstration
-
-\subsection{Mock System Implementations}
-\label{subsec:mock_systems}
-
-\subsubsection{Mock Client Management System (CMS)}
-% SOAP service mock implementation
-% Endpoints provided
-% Sample XML request/response formats
-
-\begin{lstlisting}[language=XML, caption=Sample CMS SOAP Request]
-<?xml version="1.0"?>
-<!-- Sample SOAP request to CMS -->
-</lstlisting>
-
-\subsubsection{Mock Route Optimization System (ROS)}
-% REST service mock implementation
-% API endpoints
-% Sample JSON request/response
-
-\begin{lstlisting}[language=JSON, caption=Sample ROS REST Request]
-{
-  "deliveries": [
-    {
-      "address": "123 Main St, Colombo",
-      "priority": "high"
-    }
-  ]
-}
-\end{lstlisting}
-
-\subsubsection{Mock Warehouse Management System (WMS)}
-% TCP/IP server mock implementation
-% Protocol specification
-% Message format
-
-\subsection{Core Functionality Demonstration}
-\label{subsec:core_functionality}
-
-\subsubsection{Order Submission Flow}
-% Step-by-step description of order flow
-% Screenshots or diagrams of UI
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.8\textwidth]{figures/prototype_order_flow.pdf}
-    \caption{Prototype Order Submission Flow}
-    \label{fig:proto_order}
-\end{figure}
-
-% 1. Client submits order via portal
-% 2. API Gateway receives and validates request
-% 3. Message published to broker
-% 4. Adapters consume and forward to mock systems
-% 5. Responses collected and order status updated
-% 6. Client receives confirmation
-
-\subsubsection{Service Orchestration}
-% How the architecture orchestrates communication
-% Message flow through components
-% Demonstration of asynchronous processing
-
-\subsubsection{Real-time Updates UI}
-% Simple client UI implementation
-% WebSocket connection for real-time updates
-% Status display and tracking
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.9\textwidth]{figures/prototype_ui_screenshot.png}
-    \caption{Prototype Client UI Interface}
-    \label{fig:proto_ui}
-\end{figure}
-
-\subsection{Real-time Tracking and Notification System}
-\label{subsec:realtime_tracking}
-
-\subsubsection{Architectural Description}
-% Detailed architecture for real-time features
-% WebSocket implementation
-% Push notification mechanism
-% Event broadcasting system
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{figures/realtime_architecture.pdf}
-    \caption{Real-time Tracking Architecture}
-    \label{fig:realtime_arch}
-\end{figure}
-
-\subsubsection{Minimal Implementation}
-% What was actually implemented
-% Proof-of-concept functionality
-% WebSocket connection between client and backend
-% Sample event broadcasting
-
-\subsection{Code Structure}
-\label{subsec:code_structure}
-% Organization of source code
-% Directory structure
-% Main modules and their responsibilities
-
-\begin{lstlisting}[caption=Project Directory Structure]
-project/
-|-- api-gateway/
-|-- services/
-|   |-- cms-adapter/
-|   |-- ros-adapter/
-|   |-- wms-adapter/
-|   |-- order-service/
-|-- mock-systems/
-|   |-- mock-cms/
-|   |-- mock-ros/
-|   |-- mock-wms/
-|-- client-portal/
-|-- message-broker/
-|   |-- config/
-|-- database/
-|   |-- migrations/
-|-- docker-compose.yml
-|-- README.md
-\end{lstlisting}
-
-\subsection{Setup and Running Instructions}
+\subsection{Running the Prototype}
 \label{subsec:setup}
-% How to build and run the prototype
-% Prerequisites
-% Step-by-step instructions
-% Docker Compose configuration
 
-\begin{lstlisting}[language=bash, caption=Running the Prototype]
-# Clone repository
-# Install dependencies
-# Configure environment variables
-# Start services with Docker Compose
-docker-compose up
+\begin{lstlisting}[language=bash]
+# 1. Build and start all 13 containers
+docker compose up --build
+
+# 2. Verify the gateway is up
+curl http://localhost:8081/health   # {"status":"ok"}
 \end{lstlisting}
 
-\subsection{Testing the Prototype}
+\subsection{Running the Tests}
 \label{subsec:testing}
-% How to test the prototype
-% Sample requests and expected responses
-% Testing different scenarios
 
-\subsection{Limitations and Future Work}
+The integration test suite in \texttt{source-code/tests/} covers all core flows. Node.js is required on the host.
+
+\begin{lstlisting}[language=bash]
+cd source-code && npm install
+
+# Run all tests sequentially
+node tests/test-all.js
+
+# Or run a specific flow
+node tests/test-order-workflow.js
+node tests/test-delivery-complete.js
+\end{lstlisting}
+
+The suite includes six test files: authentication, full order lifecycle, driver delivery workflow, delivery completion, delivery status query, and order history. Each test creates a unique user to avoid state collisions between runs.
+
+\subsection{Limitations}
 \label{subsec:limitations}
-% What was not implemented
-% Simplified assumptions
-% Production-readiness gaps
-% Recommended enhancements for full implementation
+
+\begin{itemize}
+    \item No client-facing UI; interaction is via the test suite. 
+    \item No TLS only using plain HTTP/WS.
+    \item Services use a in memory data variable instead of a in memory database like Redis 
+    \item Payment processor is simulated with a dummy provider with a success rate of 90\% to allow testing of compensating flows.
+\end{itemize}

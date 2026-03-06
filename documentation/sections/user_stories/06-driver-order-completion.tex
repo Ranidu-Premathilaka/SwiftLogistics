@@ -1,0 +1,36 @@
+\subsubsection{User Story 6: Driver Order Completion}
+
+% TODO: Add content
+
+\paragraph{Description}
+As a driver, I want to mark an order as complete upon delivery so that the system can update the order status and notify the client.
+
+\paragraph{Actors}
+\begin{itemize}
+    \item Driver
+    \item API Gateway
+    \item Delivery Service
+    \item Order Service
+    \item Payment Service
+    \item Notify Service
+\end{itemize}
+
+\paragraph{Sequence Diagram}
+
+\paragraph{Business Details}
+Once a driver arrives at the destination, they mark the delivery as completed (with a mandatory signature URL) or rejected. The system simultaneously updates the WMS reservation record, the CMS order status, and notifies the driver via WebSocket with the final delivery state.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth, height=0.7\textheight, keepaspectratio]{figures/delivery_complete-business.png}
+    \caption{Business Diagram for Delivery Completion} 
+    \label{fig:delivery_complete-business}
+\end{figure}
+
+\paragraph{Implementation Details}
+The driver issues a PATCH /deliveries \{orderId, status: completed|rejected, signatureUrl\} carrying a driver JWT. The Delivery Service validates that the caller has the driver role and that signatureUrl is present for completed deliveries; invalid requests are rejected before any events are published. On a valid request, the Delivery Service fires three AMQP events in parallel: wms.delivery.update\_status (WMS adapter records the new deliveryStatus and signatureUrl), cms.order.update\_status (CMS adapter calls UpdateOrderStatus via SOAP), and notify.delivery.status (Notify Service pushes a delivery\_status WebSocket message to the driver with the final state).
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth, height=0.7\textheight, keepaspectratio]{figures/delivery_complete-implementation.png}
+    \caption{Implementation Diagram for Delivery Completion}
+    \label{fig:delivery_complete-implementation}
+\end{figure}
