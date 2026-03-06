@@ -1,0 +1,49 @@
+sequenceDiagram
+    actor Driver
+    participant GW as API Gateway
+    participant DS as Delivery Service
+    participant OS as Order Service
+    participant CMS as CMS Adapter
+    participant WMS as WMS Adapter
+    participant RS as Route Service
+    participant NS as Notifications
+
+    note over OS, RS: Background — Route Index Maintenance
+    CMS-->>OS: order status updated { orderId, status, destination }
+    CMS-->>RS: order status updated { orderId, status, destination }
+    note right of RS: Adds or removes order from location index based on status
+
+    note over Driver, NS: 1 — Driver Requests Delivery Assignment
+    Driver->>GW: Request Deliveries { count }
+    GW->>DS: request delivery assignment { count }
+    DS-->>GW: Delivery request initiated
+    GW-->>Driver: Delivery request initiated
+
+    note over DS, CMS: 2 — Fetch Oldest Pending Delivery Order
+    DS-->>OS: request next pending delivery order
+    OS-->>CMS: fetch next pending delivery order
+    CMS-->>OS: { orderId, clientId, itemList, destination } | null
+    OS-->>DS: next order response
+
+    alt No pending orders
+        DS-->>NS: notify driver — no orders available
+        NS-->>Driver: WS No pending delivery orders available
+    end
+
+    note over DS, RS: 3 — Build & Optimise Delivery Route
+    DS-->>RS: request optimised route { anchorOrder, count }
+    note right of RS: Finds closest stops and optimises path
+    RS-->>DS: optimised route [{ orderId, location }]
+
+    note over DS, NS: 4 — Mark Orders On-Route & Notify Driver
+    DS-->>OS: mark orders as collected { orderIds }
+
+    loop For each order
+        OS-->>WMS: update delivery status to on_route
+        OS-->>CMS: update order status to collected
+        note right of RS: RS removes collected orders from location index
+    end
+
+    OS-->>DS: orders collected
+    DS-->>NS: notify driver with route
+    NS-->>Driver: WS driver_route [{ orderId, location }]

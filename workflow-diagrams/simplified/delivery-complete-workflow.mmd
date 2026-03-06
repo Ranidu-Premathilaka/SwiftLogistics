@@ -1,0 +1,28 @@
+sequenceDiagram
+    actor Driver
+    participant GW as API Gateway
+    
+    participant S as System
+    
+    note over Driver, S: Complete or Reject a Delivery
+    Driver->>GW: Complete or Reject Delivery { orderId, status, signatureUrl }
+    GW->>S: update delivery (role: driver)
+    S-->>GW: Delivery status updated
+    GW-->>Driver: Delivery status updated
+
+    par Updates dispatched in parallel
+        S-->>S: update delivery status { orderId, status, signatureUrl? }
+    and
+        S-->>Driver: delivery_status { orderId, deliveryStatus }
+    end
+
+    note over Driver, GW: Validation Errors
+    alt role is not driver
+        GW-->>Driver: Only drivers can complete deliveries
+    else missing orderId or status
+        GW-->>Driver: orderId and status are required
+    else invalid status value
+        GW-->>Driver: status must be completed or rejected
+    else completed but no signatureUrl
+        GW-->>Driver: signatureUrl required for completed deliveries
+    end

@@ -24,7 +24,6 @@ The client requests a list of their orders. The system queries the CMS legacy sy
 \end{figure}
 
 \paragraph{Implementation Details}
-The client issues a GET /order request carrying a valid JWT. The API Gateway injects x-username and proxies to the Order Service. The Order Service publishes a cms.orders.requested AMQP event to the CMS adapter, which calls GetOrdersByUser on the SOAP interface with the clientId. The response is forwarded to the Notify Service, which pushes an order\_query\_response WebSocket message to the client containing each order's orderId, clientId, itemList, status, createdAt, and updatedAt fields.
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth, height=0.7\textheight, keepaspectratio]{figures/view_orders-implementation.png}

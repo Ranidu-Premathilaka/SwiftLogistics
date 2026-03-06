@@ -1,0 +1,40 @@
+sequenceDiagram
+    actor User
+    participant GW as API Gateway
+    participant AS as Auth Service
+
+    note over User, AS: 1 — Signup
+    User->>GW: Sign Up { username, password, role }
+    GW->>AS: signup { username, password, role }
+
+    alt role not in [client, driver]
+        AS-->>GW: Invalid role
+        GW-->>User: Invalid role
+    else username already exists
+        AS-->>GW: User already exists
+        GW-->>User: User already exists
+    else username available
+        AS-->>GW: User created successfully
+        GW-->>User: User created successfully
+    end
+
+    note over User, AS: 2 — Login
+    User->>GW: Log In { username, password }
+    GW->>AS: login { username, password }
+
+    alt user not found or wrong password
+        AS-->>GW: Invalid credentials
+        GW-->>User: Invalid credentials
+    else credentials valid
+        AS-->>GW: { accessToken, refreshToken }
+        GW-->>User: { accessToken, refreshToken }
+        note right of GW: All subsequent requests include Bearer token
+    end
+
+    note over User, AS: 3 — Authenticated Requests
+    User->>GW: Authenticated Request
+    alt token invalid or expired
+        GW-->>User: Invalid or expired token
+    else token valid
+        GW->>GW: proxy to target service
+    end

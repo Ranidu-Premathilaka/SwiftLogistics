@@ -29,9 +29,6 @@ If all steps succeed the order is marked pending delivery the client is notified
 \end{figure}
 
 \paragraph{Implementation Details}
-Inventory browsing is a GET /items request; the Items Service queues a wms.items.request AMQP event to the WMS adapter, which calls the WMS legacy HTTP API, and the result is pushed to the client via WebSocket as items\_response.
-Order creation is a POST /order \{itemList\}; the Order Service publishes cms.order.create to the CMS adapter (SOAP CreateOrder), which generates an orderId. The CMS adapter then publishes to the Payment Service, which calls dummyCreatePaymentIntent and notifies the client via WebSocket with payment\_intent\_created \{orderId, clientSecret\}.
-Order confirmation is a PATCH /order \{orderId, status: order\_confirmed, data: \{paymentToken, itemList\}\}. Using the Saga (choreography) pattern, the Order Service coordinates: a CMS status update via AMQP, a WMS stock reservation (POST /api/wms/reserve), and a payment charge. A successful charge pushes payment\_completed to the client; stock or payment failure triggers compensating release events and pushes the appropriate failure event.
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth, height=0.8\textheight, keepaspectratio]{figures/order-implementation.png}

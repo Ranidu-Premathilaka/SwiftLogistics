@@ -1,0 +1,31 @@
+sequenceDiagram
+    actor Driver
+    participant GW as API Gateway
+    participant S as System
+    
+    note over Driver, S: 1 — Driver Requests Delivery Assignment
+    Driver->>GW: Request Deliveries
+    GW->>S: request delivery assignment
+    S-->>GW: Delivery request initiated
+    GW-->>Driver: Delivery request initiated
+
+    note over S: 2 — Fetch Oldest Pending Delivery Order
+    S-->>S: fetching oldest pending order
+
+    alt No pending orders
+        S-->>Driver: No pending delivery orders available
+    end
+
+    note over S: 3 — Build & Optimise Delivery Route
+    S-->>S: Build and optimize route
+
+    note over S: 4 — Mark Orders On-Route & Notify Driver
+    S-->>S: Mark orders as collected { orderIds }
+
+    loop For each order
+        S-->>S: update delivery status to on_route
+        S-->>S: update order status to collected
+    end
+
+    S-->>S: orders collected
+    S-->>Driver: driver_route [{ orderId, location }]

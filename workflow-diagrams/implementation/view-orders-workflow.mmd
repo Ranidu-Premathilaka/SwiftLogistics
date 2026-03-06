@@ -1,0 +1,16 @@
+sequenceDiagram
+    actor Client
+    participant GW as API Gateway
+    participant OS as Order Service
+    participant NS as Notifications
+    participant CMS as CMS Adapter
+
+    note over Client, CMS: View Orders
+    Client->>GW: View Orders
+    GW->>OS: get orders { clientId }
+    OS-->>GW: Order query initiated
+    GW-->>Client: Order query initiated
+    OS-->>CMS: fetch orders for client
+    CMS-->>OS: orders list
+    OS-->>NS: notify client with orders
+    NS-->>Client: WS order_query_response { orders }

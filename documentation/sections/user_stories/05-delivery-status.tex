@@ -25,7 +25,6 @@ Any authenticated user (client or driver) can query the current delivery status 
 \end{figure}
 
 \paragraph{Implementation Details}
-The user issues a GET /deliveries?orderId=ORD-xxx request carrying a valid JWT. The API Gateway validates the token, injects x-username, and proxies to the Delivery Service. The Delivery Service publishes wms.delivery.status\_request to the WMS adapter, which calls GET /api/wms/delivery-status?orderId=... on the WMS legacy HTTP API. The result --- one of null (reserved, payment pending), ready\_for\_pickup, on\_route, delivered, or rejected --- is forwarded to the Notify Service, which pushes a delivery\_status WebSocket message containing the orderId, deliveryStatus, and any applicable error.
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth, height=0.7\textheight, keepaspectratio]{figures/delivery_status-implementation.png}

@@ -1,0 +1,62 @@
+sequenceDiagram
+    actor Client
+    participant GW as API Gateway
+    participant IS as Items Service
+    participant OS as Order Service
+    participant NS as Notifications
+    participant CMS as CMS Adapter
+    participant PS as Payment Service
+    participant WMS as WMS Adapter
+
+    note over Client, WMS: 1 — Browse Inventory
+    Client->>GW: Browse Items
+    GW->>IS: get items
+    IS-->>GW: Items request queued
+    GW-->>Client: Items request queued
+    IS-->>WMS: request items
+    WMS-->>IS: items list
+    IS-->>NS: notify client with items
+    NS-->>Client: WS items_response { items }
+
+    note over Client, WMS: 2 — Create Order
+    Client->>GW: Place Order { itemList }
+    GW->>OS: create order { itemList }
+    OS-->>GW: Order creation initiated
+    GW-->>Client: Order creation initiated
+    OS-->>CMS: create order { clientId, itemList }
+    CMS-->>PS: order created { orderId, itemList }
+    PS-->>NS: notify payment intent created
+    NS-->>Client: WS payment_intent_created { orderId, clientSecret }
+
+    note over Client, WMS: 3 — Confirm Order
+    Client->>GW: Confirm Order { orderId, paymentToken }
+    GW->>OS: confirm order
+    OS-->>GW: Order confirmation initiated
+    GW-->>Client: Order confirmation initiated
+    OS-->>CMS: update order status to order_confirmed
+    CMS-->>OS: order status updated
+    OS-->>WMS: reserve items { orderId, itemList }
+
+    alt All items in stock
+        WMS-->>OS: reservation confirmed
+        OS-->>PS: charge payment { orderId, paymentToken }
+
+        alt Charge succeeds
+            PS-->>OS: payment completed
+            OS-->>NS: notify payment completed
+            NS-->>Client: WS payment_completed { orderId }
+            OS-->>CMS: update order status to pending_delivery
+            OS-->>WMS: update delivery status to ready_for_pickup
+
+        else Charge declined
+            PS-->>OS: payment failed
+            OS-->>WMS: release reserved items
+            OS-->>NS: notify payment failed
+            NS-->>Client: WS payment_failed { orderId }
+        end
+
+    else Item unavailable or out of stock
+        WMS-->>OS: reservation failed
+        OS-->>NS: notify reservation failed
+        NS-->>Client: WS reservation_failed { orderId }
+    end

@@ -1,0 +1,50 @@
+sequenceDiagram
+    actor Client
+    participant GW as API Gateway
+    participant S as System
+    
+    note over Client, S: 1 — Browse Inventory
+    Client->>GW: Browse Items
+    GW->>S: get items
+    S-->>GW: Items request queued
+    GW-->>Client: Items request queued
+    S-->>S: request items
+    S-->>Client: Return requested items
+
+    note over Client, S: 2 — Create Order
+    Client->>GW: Place Order { itemList }
+    GW->>S: create order { itemList }
+    S-->>GW: Order creation initiated
+    GW-->>Client: Order creation initiated
+    S-->>S: create order { clientId, itemList }
+    S-->>Client: payment_intent_created { orderId, clientSecret }
+
+    note over Client, S: 3 — Confirm Order
+    Client->>GW: Confirm Order { orderId, paymentToken }
+    GW->>S: confirm order
+    S-->>GW: Order confirmation initiated
+    GW-->>Client: Order confirmation initiated
+    S-->>S: update order status to order_confirmed
+    S-->>S: reserve items { orderId, itemList }
+
+    alt All items in stock
+        S-->>S: reservation confirmed
+        S-->>S: charge payment { orderId, paymentToken }
+
+        alt Charge succeeds
+            S-->>S: payment completed
+            S-->>Client: notify payment_completed { orderId }
+            S-->>S: update order status to pending_delivery
+            S-->>S: update delivery status to ready_for_pickup
+
+        else Charge declined
+            S-->>S: payment failed
+            S-->>S: release reserved items
+            S-->>S: notify payment failed
+            S-->>Client: payment_failed { orderId }
+        end
+
+    else Item unavailable or out of stock
+        S-->>S: reservation failed
+        S-->>Client: reservation_failed { orderId }
+    end

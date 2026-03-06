@@ -1,0 +1,33 @@
+sequenceDiagram
+    actor Driver
+    participant GW as API Gateway
+    participant DS as Delivery Service
+    participant WMS as WMS Adapter
+    participant CMS as CMS Adapter
+    participant NS as Notifications
+
+    note over Driver, NS: Complete or Reject a Delivery
+    Driver->>GW: Complete or Reject Delivery { orderId, status, signatureUrl }
+    GW->>DS: update delivery (role: driver)
+    DS-->>GW: Delivery status updated
+    GW-->>Driver: Delivery status updated
+
+    par Updates dispatched in parallel
+        DS-->>WMS: update delivery status { orderId, status, signatureUrl? }
+    and
+        DS-->>CMS: update order status { orderId, status }
+    and
+        DS-->>NS: notify driver { orderId, deliveryStatus, signatureUrl? }
+        NS-->>Driver: WS delivery_status { orderId, deliveryStatus }
+    end
+
+    note over Driver, GW: Validation Errors
+    alt role is not driver
+        GW-->>Driver: Only drivers can complete deliveries
+    else missing orderId or status
+        GW-->>Driver: orderId and status are required
+    else invalid status value
+        GW-->>Driver: status must be completed or rejected
+    else completed but no signatureUrl
+        GW-->>Driver: signatureUrl required for completed deliveries
+    end

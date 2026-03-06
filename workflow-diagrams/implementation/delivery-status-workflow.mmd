@@ -1,0 +1,24 @@
+sequenceDiagram
+    actor User as Client / Driver
+    participant GW as API Gateway
+    participant DS as Delivery Service
+    participant WMS as WMS Adapter
+    participant NS as Notifications
+
+    note over User, NS: Query Delivery Status
+    User->>GW: Check Delivery Status { orderId }
+    GW->>DS: get delivery status { orderId }
+    DS-->>GW: Delivery status request initiated
+    GW-->>User: Delivery status request initiated
+
+    DS-->>WMS: request delivery status { orderId }
+
+    alt Reservation exists
+        WMS-->>DS: { orderId, deliveryStatus }
+    else No reservation found
+        WMS-->>DS: { orderId, deliveryStatus: null, error }
+    end
+
+    DS-->>NS: notify user { orderId, deliveryStatus }
+    NS-->>User: WS delivery_status { orderId, deliveryStatus }
+

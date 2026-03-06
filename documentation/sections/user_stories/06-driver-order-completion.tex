@@ -27,7 +27,6 @@ Once a driver arrives at the destination, they mark the delivery as completed (w
 \end{figure}
 
 \paragraph{Implementation Details}
-The driver issues a PATCH /deliveries \{orderId, status: completed|rejected, signatureUrl\} carrying a driver JWT. The Delivery Service validates that the caller has the driver role and that signatureUrl is present for completed deliveries; invalid requests are rejected before any events are published. On a valid request, the Delivery Service fires three AMQP events in parallel: wms.delivery.update\_status (WMS adapter records the new deliveryStatus and signatureUrl), cms.order.update\_status (CMS adapter calls UpdateOrderStatus via SOAP), and notify.delivery.status (Notify Service pushes a delivery\_status WebSocket message to the driver with the final state).
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth, height=0.7\textheight, keepaspectratio]{figures/delivery_complete-implementation.png}
