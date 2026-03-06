@@ -16,6 +16,7 @@ As a client, I want to receive real-time updates on the delivery status so that 
 \paragraph{Sequence Diagram}
 
 \paragraph{Business Details}
+Any authenticated user (client or driver) can query the current delivery status of a specific order at any time. The system looks up the reservation record in the WMS legacy system and returns the current delivery status to the requester via WebSocket.
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth, height=0.7\textheight, keepaspectratio]{figures/delivery_status-business.png}
@@ -24,6 +25,7 @@ As a client, I want to receive real-time updates on the delivery status so that 
 \end{figure}
 
 \paragraph{Implementation Details}
+The user issues a GET /deliveries?orderId=ORD-xxx request carrying a valid JWT. The API Gateway validates the token, injects x-username, and proxies to the Delivery Service. The Delivery Service publishes wms.delivery.status\_request to the WMS adapter, which calls GET /api/wms/delivery-status?orderId=... on the WMS legacy HTTP API. The result --- one of null (reserved, payment pending), ready\_for\_pickup, on\_route, delivered, or rejected --- is forwarded to the Notify Service, which pushes a delivery\_status WebSocket message containing the orderId, deliveryStatus, and any applicable error.
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth, height=0.7\textheight, keepaspectratio]{figures/delivery_status-implementation.png}

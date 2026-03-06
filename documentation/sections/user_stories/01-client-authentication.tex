@@ -12,9 +12,16 @@ As a client, I want to authenticate with the platform so that I can securely acc
     \item Auth Service
 \end{itemize}
 
+% NOTE: In business details section, we only talk about the interaction between actors and the system as one entity. In implementation details section, we talk about the interaction between actors and individual services.
 \paragraph{Sequence Diagram}
 
 \paragraph{Business Details}
+The authentication workflow covers four operations.
+During signup, the client submits a username, password, and role; the system validates the role and username uniqueness before creating the account.
+During login, the client submits credentials; the system validates them and returns both an access token and a refresh token.
+All subsequent requests carry the access token, which the gateway validates before routing each request internally.
+When the access token expires, the client can refresh it by exchanging a valid refresh token for a new access token without re-authenticating.
+
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth, height=0.7\textheight, keepaspectratio]{figures/auth-business.png}
@@ -23,6 +30,15 @@ As a client, I want to authenticate with the platform so that I can securely acc
 \end{figure}
 
 \paragraph{Implementation Details}
+
+\begin{itemize}
+    \item Signup: POST /auth/signup with \{username, password, role\}; the Auth Service hashes the password before storing it (role must be client or driver).
+    \item Login: POST /auth/login; on success the Auth Service signs a short-lived JWT access token and a longer-lived JWT refresh token, persists the refresh token in the Auth DB, and returns both to the client.
+    \item All other routes require an Authorization: Bearer <accessToken> header; the gateway calls jwt.verify and, on success, injects x-username and x-role headers before proxying downstream.
+    \item Token rotation is handled via POST /auth/refresh --- the refresh token is verified against the DB and a new access token is issued.
+    \item Logout: POST /auth/logout deletes the refresh token from the DB, revoking further refresh operations.
+\end{itemize}
+
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth, height=0.7\textheight, keepaspectratio]{figures/auth-implementation.png}

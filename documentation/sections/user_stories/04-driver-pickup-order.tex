@@ -17,6 +17,7 @@ As a driver, I want to pick up an assigned order so that I can begin the deliver
 \paragraph{Sequence Diagram}
 
 \paragraph{Business Details}
+The driver requests a batch of delivery assignments. The system retrieves the oldest pending delivery order from the CMS, builds a multi-stop optimised route by finding geographically nearby pending orders from an in-memory route index, marks all selected orders as collected, and pushes the ordered route to the driver via WebSocket.
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth, height=0.7\textheight, keepaspectratio]{figures/delivery-business.png}
@@ -25,6 +26,7 @@ As a driver, I want to pick up an assigned order so that I can begin the deliver
 \end{figure}
 
 \paragraph{Implementation Details}
+The driver issues a POST /deliveries \{count\} carrying a driver JWT. The Delivery Service publishes order.delivery.request\_next through the Order Service to the CMS adapter (GetNextPendingDelivery SOAP call). The Route Service maintains an in-memory orderLocationIndex by listening for order.status\_updated events; it uses this index to select up to count - 1 nearby orders as additional stops. The combined stop list is sent to the ROS adapter (Route Optimisation Service) via POST /api/ros/optimize-route, which returns an optimised path. For each order in the path, the Delivery Service fires parallel AMQP events to mark the WMS delivery status as on\_route and the CMS order status as collected. Once all acknowledgements are received, the optimised route is pushed to the driver as a driver\_route WebSocket message.
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth, height=0.7\textheight, keepaspectratio]{figures/delivery-implementation.png}
