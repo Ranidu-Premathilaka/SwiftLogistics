@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SwiftLogistics — Interactive Test UI</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --border: #30363d;
+    --text: #c9d1d9; --text-muted: #8b949e; --text-bright: #f0f6fc;
+    --blue: #58a6ff; --green: #3fb950; --red: #f85149;
+    --yellow: #d29922; --purple: #bc8cff; --cyan: #56d4dd;
+    --orange: #db6d28;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    background: var(--bg); color: var(--text); line-height: 1.5;
+    display: flex; flex-direction: column; height: 100vh;
+  }
+  header {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 12px 24px; display: flex; align-items: center; gap: 16px; flex-shrink: 0;
+  }
+  header h1 { font-size: 16px; color: var(--blue); font-weight: 600; }
+  header .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+  header .status-dot.connected { background: var(--green); }
+  header .status-label { font-size: 12px; color: var(--text-muted); }
+  .gateway-badge {
+    margin-left: auto; font-size: 11px; color: var(--text-muted);
+    background: var(--bg); padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border);
+  }
+
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  /* ── Left panel: actions ── */
+  .panel-left {
+    width: 380px; min-width: 320px; border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; background: var(--surface); overflow-y: auto;
+  }
+  .section-header {
+    padding: 10px 16px; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1px; color: var(--blue);
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 2;
+  }
+  .action-group { padding: 8px 12px; }
+  .action-group h3 {
+    font-size: 12px; font-weight: 600; color: var(--purple); margin-bottom: 6px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .action-group h3 .phase-num {
+    background: var(--purple); color: var(--bg); border-radius: 3px;
+    padding: 1px 6px; font-size: 10px; font-weight: 700;
+  }
+  .action-btn {
+    display: flex; align-items: center; width: 100%; padding: 7px 10px;
+    border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
+    color: var(--text); font-size: 12px; cursor: pointer; margin-bottom: 4px;
+    transition: all 0.15s; text-align: left; font-family: inherit;
+    gap: 8px;
+  }
+  .action-btn:hover { border-color: var(--blue); background: #1c2129; }
+  .action-btn:active { transform: scale(0.98); }
+  .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .action-btn .method {
+    font-weight: 700; font-size: 10px; min-width: 44px; text-align: center;
+    padding: 2px 6px; border-radius: 3px; flex-shrink: 0;
+  }
+  .method.GET    { background: #0d419d44; color: var(--cyan); }
+  .method.POST   { background: #23863644; color: var(--green); }
+  .method.PATCH  { background: #9e6a0344; color: var(--yellow); }
+  .method.DELETE { background: #da363344; color: var(--red); }
+  .method.WS     { background: #8b5cf633; color: var(--purple); }
+  .method.RUN    { background: #db6d2833; color: var(--orange); }
+  .action-btn .path { color: var(--text-muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .action-btn .result-icon { font-size: 14px; flex-shrink: 0; }
+  .action-btn.passed  { border-color: var(--green); }
+  .action-btn.failed  { border-color: var(--red); }
+  .action-btn.running { border-color: var(--yellow); }
+
+  .run-all-bar {
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    background: var(--surface); position: sticky; top: 0; z-index: 3;
+    display: flex; gap: 8px; align-items: center;
+  }
+  .run-all-btn {
+    flex: 1; padding: 8px 12px; border: none; border-radius: 6px;
+    background: var(--blue); color: var(--bg); font-weight: 700; font-size: 13px;
+    cursor: pointer; font-family: inherit; transition: all 0.15s;
+  }
+  .run-all-btn:hover { filter: brightness(1.15); }
+  .run-all-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .run-all-btn.suite { background: var(--green); }
+  .counter {
+    font-size: 12px; color: var(--text-muted); min-width: 100px; text-align: right;
+  }
+  .counter .pass { color: var(--green); font-weight: 700; }
+  .counter .fail { color: var(--red); font-weight: 700; }
+
+  /* ── Right panel: logs ──  */
+  .panel-right { flex: 1; display: flex; flex-direction: column; }
+  .log-header {
+    padding: 10px 16px; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1px; color: var(--cyan);
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .log-header button {
+    margin-left: auto; font-size: 11px; background: none; border: 1px solid var(--border);
+    color: var(--text-muted); padding: 3px 10px; border-radius: 4px; cursor: pointer;
+    font-family: inherit;
+  }
+  .log-header button:hover { border-color: var(--text-muted); color: var(--text); }
+  #log {
+    flex: 1; overflow-y: auto; padding: 12px 16px; font-size: 12px;
+    background: var(--bg); scroll-behavior: smooth;
+  }
+  .log-entry { margin-bottom: 2px; word-break: break-all; white-space: pre-wrap; }
+  .log-entry.req   { color: var(--cyan); }
+  .log-entry.res   { color: var(--green); }
+  .log-entry.res.error { color: var(--red); }
+  .log-entry.ws    { color: var(--purple); }
+  .log-entry.info  { color: var(--text-muted); }
+  .log-entry.test  { color: var(--blue); font-weight: 600; }
+  .log-entry.pass  { color: var(--green); font-weight: 700; }
+  .log-entry.fail  { color: var(--red); font-weight: 700; }
+  .log-entry.section { color: var(--yellow); font-weight: 700; margin-top: 8px; }
+
+  /* ── State panel (bottom bar) ── */
+  .state-bar {
+    background: var(--surface); border-top: 1px solid var(--border);
+    padding: 6px 16px; font-size: 11px; color: var(--text-muted);
+    display: flex; gap: 20px; flex-shrink: 0; flex-wrap: wrap;
+  }
+  .state-item { display: flex; align-items: center; gap: 4px; }
+  .state-item .label { color: var(--text-muted); }
+  .state-item .value { color: var(--cyan); font-weight: 600; }
+  .state-item .value.none { color: var(--text-muted); font-style: italic; }
+
+  /* ── Input modals ── */
+  .input-row {
+    display: flex; gap: 6px; padding: 4px 12px; align-items: center; flex-wrap: wrap;
+  }
+  .input-row label { font-size: 11px; color: var(--text-muted); min-width: 70px; }
+  .input-row input, .input-row select {
+    flex: 1; min-width: 100px; padding: 4px 8px; border-radius: 4px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+    font-family: inherit; font-size: 12px;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⚡ SwiftLogistics — Test Dashboard</h1>
+  <div class="status-dot" id="gwDot"></div>
+  <span class="status-label" id="gwLabel">Checking gateway…</span>
+  <div class="gateway-badge" id="gwBadge">Gateway: checking…</div>
+</header>
+
+<div class="main">
+  <!-- Left Panel: Test Actions -->
+  <div class="panel-left">
+    <div class="run-all-bar">
+      <button class="run-all-btn" id="btnRunAll" onclick="runAllPhases()">▶ Run All Phases</button>
+      <div class="counter">
+        <span class="pass" id="passCount">0</span> ✔ &nbsp;
+        <span class="fail" id="failCount">0</span> ✘
+      </div>
+    </div>
+
+    <!-- Phase 1: Auth -->
+    <div class="action-group">
+      <h3><span class="phase-num">1</span> Authentication</h3>
+      <div class="input-row">
+        <label>Client</label>
+        <input id="clientUser" placeholder="auto-generated">
+      </div>
+      <div class="input-row">
+        <label>Driver</label>
+        <input id="driverUser" placeholder="auto-generated">
+      </div>
+      <div class="input-row">
+        <label>Password</label>
+        <input id="password" value="TestPass123!">
+      </div>
+      <button class="action-btn" data-action="signup-client" onclick="runAction(this)">
+        <span class="method POST">POST</span>
+        <span class="path">/auth/signup — Client</span>
+        <span class="result-icon"></span>
+      </button>
+      <button class="action-btn" data-action="login-client" onclick="runAction(this)">
+        <span class="method POST">POST</span>
+        <span class="path">/auth/login — Client</span>
+        <span class="result-icon"></span>
+      </button>
+      <button class="action-btn" data-action="signup-driver" onclick="runAction(this)">
+        <span class="method POST">POST</span>
+        <span class="path">/auth/signup — Driver</span>
+        <span class="result-icon"></span>
+      </button>
+      <button class="action-btn" data-action="login-driver" onclick="runAction(this)">
+        <span class="method POST">POST</span>
+        <span class="path">/auth/login — Driver</span>
+        <span class="result-icon"></span>
+      </button>
+      <button class="action-btn" data-action="ws-client" onclick="runAction(this)">
+        <span class="method WS">WS</span>
+        <span class="path">Connect Client WebSocket</span>
+        <span class="result-icon"></span>
+      </button>
+      <button class="action-btn" data-action="ws-driver" onclick="runAction(this)">
+        <span class="method WS">WS</span>
+        <span class="path">Connect Driver WebSocket</span>
+        <span class="result-icon"></span>
+      </button>
+      <button class="action-btn" data-action="signup-dup" onclick="runAction(this)">
+        <span class="method POST">POST</span>
+        <span class="path">/auth/signup — Duplicate → 409</span>
+        <span class="result-icon"></span>
+      </button>
+      <button class="action-btn" data-action="login-bad" onclick="runAction(this)">
+        <span class="method POST">POST</span>
+        <span class="path">/auth/login — Bad Password → 401</span>
+        <span class="result-icon"></span>
+      </button>
+      <button class="action-btn" data-action="no-token" onclick="runAction(this)">
+        <span class="method GET">GET</span>
+        <span class="path">/order — No Token → 401</span>
+        <span class="result-icon"></span>
+      </button>
+      <button class="action-btn" data-action="bad-token" onclick="runAction(this)">
+        <span class="method GET">GET</span>
+        <span class="path">/order — Invalid Token → 401</span>
+        <span class="result-icon"></span>
+      </button>
+    </div>
+
+    <!-- Phase 2: Browse Inventory -->
+    <div class="action-group">
+      <h3><span class="phase-num">2</span> Browse Inventory</h3>
+      <button class="action-btn" data-action="get-items" onclick="runAction(this)">
+        <span class="method GET">GET</span>
+        <span class="path">/items → WS items_response</span>
+        <span class="result-icon"></span>
+      </button>
+    </div>
+
+    <!-- Phase 3: Create Orders -->
+    <div class="action-group">
+      <h3><span class="phase-num">3</span> Create Orders</h3>
+      <div class="input-row">
+        <label>Destination</label>
+        <input id="orderDest" value="10 Logistics Ave, Zone 42">
+      </div>
+      <button class="action-btn" data-action="create-order" onclick="runAction(this)">
+        <span class="method POST">POST</span>
+        <span class="path">/order → Create + Await Payment Intent</span>
+        <span class="result-icon"></span>
+      </button>
+      <button class="action-btn" data-action="confirm-order" onclick="runAction(this)">
+        <span class="method PATCH">PATCH</span>
+        <span class="path">/order → Confirm + Await Payment Result</span>
+        <span class="result-icon"></span>
+      </button>
+      <button class="action-btn" data-action="create-order-full" onclick="runAction(this)">
+        <span class="method RUN">RUN</span>
+        <span class="path">Full Order Cycle (create → confirm → payment)</span>
+        <span class="result-icon"></span>
+      </button>
+    </div>
+
+    <!-- Phase 4: View Orders -->
+    <div class="action-group">
+      <h3><span class="phase-num">4</span> View Orders</h3>
+      <button class="action-btn" data-action="view-orders" onclick="runAction(this)">
+        <span class="method GET">GET</span>
+        <span class="path">/order → WS order_query_response</span>
+        <span class="result-icon"></span>
+      </button>
+    </div>
+
+    <!-- Phase 5: Delivery Status -->
+    <div class="action-group">
+      <h3><span class="phase-num">5</span> Delivery Status</h3>
+      <div class="input-row">
+        <label>Order ID</label>
+        <input id="statusOrderId" placeholder="auto from Phase 3">
+      </div>
+      <button class="action-btn" data-action="delivery-status" onclick="runAction(this)">
+        <span class="method GET">GET</span>
+        <span class="path">/deliveries?orderId=… → WS delivery_status</span>
+        <span class="result-icon"></span>
+      </button>
+      <button class="action-btn" data-action="delivery-status-unknown" onclick="runAction(this)">
+        <span class="method GET">GET</span>
+        <span class="path">/deliveries?orderId=unknown → null + error</span>
+        <span class="result-icon"></span>
+      </button>
+      <button class="action-btn" data-action="delivery-status-noauth" onclick="runAction(this)">
+        <span class="method GET">GET</span>
+        <span class="path">/deliveries — No Token → 401</span>
+        <span class="result-icon"></span>
+      </button>
+    </div>
+
+    <!-- Phase 6: Assign Delivery Route -->
+    <div class="action-group">
+      <h3><span class="phase-num">6</span> Assign Delivery Route</h3>
+      <div class="input-row">
+        <label>Count</label>
+        <input id="deliveryCount" type="number" value="1" min="1" max="10">
+      </div>
+      <button class="action-btn" data-action="delivery-assign-403" onclick="runAction(this)">
+        <span class="method POST">POST</span>
+        <span class="path">/deliveries (client role) → 403</span>
+        <span class="result-icon"></span>
+      </button>
+      <button class="action-btn" data-action="delivery-assign" onclick="runAction(this)">
+        <span class="method POST">POST</span>
+        <span class="path">/deliveries (driver) → WS driver_route</span>
+        <span class="result-icon"></span>
+      </button>
+    </div>
+
+    <!-- Phase 7: Complete / Reject Delivery -->
+    <div class="action-group">
+      <h3><span class="phase-num">7</span> Complete / Reject Delivery</h3>
+      <div class="input-row">
+        <label>Order ID</label>
+        <input id="completeOrderId" placeholder="auto from Phase 6">
+      </div>
+      <div class="input-row">
+        <label>Signature</label>
+        <input id="signatureUrl" value="https://cdn.swiftlogistics.example/signatures/sig-test.jpg">
+      </div>
+      <button class="action-btn" data-action="delivery-complete" onclick="runAction(this)">
+        <span class="method PATCH">PATCH</span>
+        <span class="path">/deliveries (completed + signature)</span>
+        <span class="result-icon"></span>
+      </button>
+      <button class="action-btn" data-action="delivery-reject" onclick="runAction(this)">
+        <span class="method PATCH">PATCH</span>
+        <span class="path">/deliveries (rejected)</span>
+        <span class="result-icon"></span>
+      </button>
+    </div>
+
+    <!-- Phase 8: Validation Errors -->
+    <div class="action-group">
+      <h3><span class="phase-num">8</span> Validation Errors</h3>
+      <button class="action-btn" data-action="val-client-role" onclick="runAction(this)">
+        <span class="method PATCH">PATCH</span>
+        <span class="path">/deliveries (client role) → 403</span>
+        <span class="result-icon"></span>
+      </button>
+      <button class="action-btn" data-action="val-no-token" onclick="runAction(this)">
+        <span class="method PATCH">PATCH</span>
+        <span class="path">/deliveries (no token) → 401</span>
+        <span class="result-icon"></span>
+      </button>
+      <button class="action-btn" data-action="val-no-orderid" onclick="runAction(this)">
+        <span class="method PATCH">PATCH</span>
+        <span class="path">/deliveries (missing orderId) → 400</span>
+        <span class="result-icon"></span>
+      </button>
+      <button class="action-btn" data-action="val-invalid-status" onclick="runAction(this)">
+        <span class="method PATCH">PATCH</span>
+        <span class="path">/deliveries (invalid status) → 400</span>
+        <span class="result-icon"></span>
+      </button>
+      <button class="action-btn" data-action="val-no-sig" onclick="runAction(this)">
+        <span class="method PATCH">PATCH</span>
+        <span class="path">/deliveries (completed, no sig) → 400</span>
+        <span class="result-icon"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Right Panel: Log Output -->
+  <div class="panel-right">
+    <div class="log-header">
+      <span>📋 Test Log</span>
+      <span id="logCount" style="font-weight:400; color:var(--text-muted)">0 entries</span>
+      <button onclick="clearLog()">Clear</button>
+    </div>
+    <div id="log"></div>
+  </div>
+</div>
+
+<!-- State Bar -->
+<div class="state-bar">
+  <div class="state-item"><span class="label">Client Token:</span> <span class="value none" id="stClientToken">none</span></div>
+  <div class="state-item"><span class="label">Driver Token:</span> <span class="value none" id="stDriverToken">none</span></div>
+  <div class="state-item"><span class="label">Client WS:</span> <span class="value none" id="stClientWS">disconnected</span></div>
+  <div class="state-item"><span class="label">Driver WS:</span> <span class="value none" id="stDriverWS">disconnected</span></div>
+  <div class="state-item"><span class="label">Orders:</span> <span class="value" id="stOrders">0</span></div>
+  <div class="state-item"><span class="label">Last Order:</span> <span class="value none" id="stLastOrder">—</span></div>
+  <div class="state-item"><span class="label">Route Order:</span> <span class="value none" id="stRouteOrder">—</span></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+//  State
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const TS = Date.now();
+const state = {
+    clientToken:  null,
+    driverToken:  null,
+    clientWs:     null,   // browser WS to our bridge
+    driverWs:     null,
+    items:        [],
+    selectedItems:[],
+    completedOrderIds: [],
+    lastOrderId:  null,
+    lastClientSecret: null,
+    routeOrderId: null,
+    rejectOrderId:null,
+    wsWaiters:    [],     // [{ label, event, resolve, reject, timer }]
+};
+
+let passCount = 0;
+let failCount = 0;
+let logEntries = 0;
+let isRunningAll = false;
+
+// auto-generate usernames
+document.getElementById('clientUser').value = `ui_client_${TS}`;
+document.getElementById('driverUser').value = `ui_driver_${TS}`;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Logging
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const logEl = document.getElementById('log');
+
+function log(text, cls = 'info') {
+    const el = document.createElement('div');
+    el.className = `log-entry ${cls}`;
+    el.textContent = text;
+    logEl.appendChild(el);
+    logEl.scrollTop = logEl.scrollHeight;
+    logEntries++;
+    document.getElementById('logCount').textContent = `${logEntries} entries`;
+}
+
+function logJSON(label, obj, cls = 'info') {
+    log(`${label} ${JSON.stringify(obj, null, 2)}`, cls);
+}
+
+function clearLog() {
+    logEl.innerHTML = '';
+    logEntries = 0;
+    document.getElementById('logCount').textContent = '0 entries';
+}
+
+function updateCounters() {
+    document.getElementById('passCount').textContent = passCount;
+    document.getElementById('failCount').textContent = failCount;
+}
+
+function markBtn(btn, status) {
+    btn.classList.remove('passed', 'failed', 'running');
+    btn.classList.add(status);
+    const icon = btn.querySelector('.result-icon');
+    if (status === 'passed')  icon.textContent = '✔';
+    if (status === 'failed')  icon.textContent = '✘';
+    if (status === 'running') icon.textContent = '⋯';
+}
+
+function updateState() {
+    const ct = document.getElementById('stClientToken');
+    const dt = document.getElementById('stDriverToken');
+    ct.textContent = state.clientToken ? state.clientToken.slice(0, 16) + '…' : 'none';
+    ct.className   = state.clientToken ? 'value' : 'value none';
+    dt.textContent = state.driverToken ? state.driverToken.slice(0, 16) + '…' : 'none';
+    dt.className   = state.driverToken ? 'value' : 'value none';
+
+    document.getElementById('stClientWS').textContent = state.clientWs ? 'connected' : 'disconnected';
+    document.getElementById('stClientWS').className   = state.clientWs ? 'value' : 'value none';
+    document.getElementById('stDriverWS').textContent = state.driverWs ? 'connected' : 'disconnected';
+    document.getElementById('stDriverWS').className   = state.driverWs ? 'value' : 'value none';
+
+    document.getElementById('stOrders').textContent = state.completedOrderIds.length;
+    const lo = document.getElementById('stLastOrder');
+    lo.textContent = state.lastOrderId || '—';
+    lo.className   = state.lastOrderId ? 'value' : 'value none';
+    const ro = document.getElementById('stRouteOrder');
+    ro.textContent = state.routeOrderId || '—';
+    ro.className   = state.routeOrderId ? 'value' : 'value none';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  HTTP helpers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function api(method, path, body, token) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    headers['x-request-id'] = `ui-${Date.now()}`;
+
+    log(`↑ ${method} ${path}`, 'req');
+    if (body) log(`  body: ${JSON.stringify(body)}`, 'req');
+
+    const opts = { method, headers };
+    if (body && method !== 'GET') opts.body = JSON.stringify(body);
+
+    const res = await fetch(`/api${path}`, opts);
+    let data;
+    const ct = res.headers.get('content-type') || '';
+    if (ct.includes('json')) {
+        data = await res.json();
+    } else {
+        data = await res.text();
+    }
+
+    const isErr = res.status >= 400;
+    log(`↓ ${res.status} ${typeof data === 'string' ? data : JSON.stringify(data)}`, isErr ? 'res error' : 'res');
+    return { status: res.status, body: data };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  WebSocket helpers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function connectWs(label, token) {
+    return new Promise((resolve, reject) => {
+        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+        const url   = `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&label=${label}`;
+        const ws    = new WebSocket(url);
+
+        ws.onopen = () => { log(`← WS [${label}] bridge connected`, 'ws'); };
+
+        ws.onmessage = (evt) => {
+            try {
+                const msg = JSON.parse(evt.data);
+                if (msg.type === 'ws_connected') {
+                    log(`← WS [${label}] gateway connected`, 'ws');
+                    resolve(ws);
+                } else if (msg.type === 'ws_message') {
+                    const event = msg.data?.payload?.event || '(unknown)';
+                    log(`← WS [${label}] ${event}: ${JSON.stringify(msg.data.payload)}`, 'ws');
+                    deliverWsMessage(label, msg.data);
+                } else if (msg.type === 'ws_error') {
+                    log(`← WS [${label}] error: ${msg.message}`, 'fail');
+                } else if (msg.type === 'ws_closed') {
+                    log(`← WS [${label}] closed`, 'ws');
+                }
+            } catch { /* ignore */ }
+        };
+
+        ws.onerror = () => reject(new Error(`WS bridge connection failed for ${label}`));
+        ws.onclose = () => {
+            if (label === 'client') { state.clientWs = null; updateState(); }
+            if (label === 'driver') { state.driverWs = null; updateState(); }
+        };
+
+        setTimeout(() => reject(new Error(`WS connect timeout for ${label}`)), 15000);
+    });
+}
+
+function deliverWsMessage(label, data) {
+    const event = data?.payload?.event;
+    const orderId = data?.payload?.orderId;
+    for (let i = 0; i < state.wsWaiters.length; i++) {
+        const w = state.wsWaiters[i];
+        if (w.label === label && w.matchFn(data)) {
+            state.wsWaiters.splice(i, 1);
+            clearTimeout(w.timer);
+            w.resolve(data);
+            return;
+        }
+    }
+}
+
+function waitForWsEvent(label, eventName, ms = 25000) {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            const idx = state.wsWaiters.findIndex(w => w.id === id);
+            if (idx !== -1) state.wsWaiters.splice(idx, 1);
+            reject(new Error(`Timeout waiting for WS [${label}] event: ${eventName}`));
+        }, ms);
+        const id = Symbol();
+        state.wsWaiters.push({
+            id, label, timer, resolve, reject,
+            matchFn: (msg) => msg?.payload?.event === eventName,
+        });
+    });
+}
+
+function waitForWsAny(label, eventNames, ms = 25000) {
+    const set = new Set(eventNames);
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            const idx = state.wsWaiters.findIndex(w => w.id === id);
+            if (idx !== -1) state.wsWaiters.splice(idx, 1);
+            reject(new Error(`Timeout waiting for WS [${label}] events: ${eventNames.join('|')}`));
+        }, ms);
+        const id = Symbol();
+        state.wsWaiters.push({
+            id, label, timer, resolve, reject,
+            matchFn: (msg) => set.has(msg?.payload?.event),
+        });
+    });
+}
+
+function waitForDeliveryStatus(label, orderId, ms = 25000) {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            const idx = state.wsWaiters.findIndex(w => w.id === id);
+            if (idx !== -1) state.wsWaiters.splice(idx, 1);
+            reject(new Error(`Timeout waiting for delivery_status orderId=${orderId}`));
+        }, ms);
+        const id = Symbol();
+        state.wsWaiters.push({
+            id, label, timer, resolve, reject,
+            matchFn: (msg) => msg?.payload?.event === 'delivery_status' && msg?.payload?.orderId === orderId,
+        });
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Action handlers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const actions = {
+    // ── Phase 1: Auth ──
+
+    'signup-client': async () => {
+        const { status, body } = await api('POST', '/auth/signup', {
+            username: document.getElementById('clientUser').value,
+            password: document.getElementById('password').value,
+            role: 'client',
+        });
+        if (status !== 200) throw new Error(`Expected 200, got ${status}`);
+    },
+
+    'login-client': async () => {
+        const { status, body } = await api('POST', '/auth/login', {
+            username: document.getElementById('clientUser').value,
+            password: document.getElementById('password').value,
+        });
+        if (status !== 200) throw new Error(`Expected 200, got ${status}`);
+        if (!body.accessToken) throw new Error('Missing accessToken');
+        state.clientToken = body.accessToken;
+        updateState();
+    },
+
+    'signup-driver': async () => {
+        const { status } = await api('POST', '/auth/signup', {
+            username: document.getElementById('driverUser').value,
+            password: document.getElementById('password').value,
+            role: 'driver',
+        });
+        if (status !== 200) throw new Error(`Expected 200, got ${status}`);
+    },
+
+    'login-driver': async () => {
+        const { status, body } = await api('POST', '/auth/login', {
+            username: document.getElementById('driverUser').value,
+            password: document.getElementById('password').value,
+        });
+        if (status !== 200) throw new Error(`Expected 200, got ${status}`);
+        if (!body.accessToken) throw new Error('Missing accessToken');
+        state.driverToken = body.accessToken;
+        updateState();
+    },
+
+    'ws-client': async () => {
+        if (!state.clientToken) throw new Error('Login client first');
+        state.clientWs = await connectWs('client', state.clientToken);
+        updateState();
+    },
+
+    'ws-driver': async () => {
+        if (!state.driverToken) throw new Error('Login driver first');
+        state.driverWs = await connectWs('driver', state.driverToken);
+        updateState();
+    },
+
+    'signup-dup': async () => {
+        const { status } = await api('POST', '/auth/signup', {
+            username: document.getElementById('clientUser').value,
+            password: document.getElementById('password').value,
+        });
+        if (status !== 409) throw new Error(`Expected 409, got ${status}`);
+    },
+
+    'login-bad': async () => {
+        const { status } = await api('POST', '/auth/login', {
+            username: document.getElementById('clientUser').value,
+            password: 'wrongpassword',
+        });
+        if (status !== 401) throw new Error(`Expected 401, got ${status}`);
+    },
+
+    'no-token': async () => {
+        const { status } = await api('GET', '/order/');
+        if (status !== 401) throw new Error(`Expected 401, got ${status}`);
+    },
+
+    'bad-token': async () => {
+        const res = await fetch('/api/order/', {
+            headers: { Authorization: 'Bearer this.is.not.valid' },
+        });
+        log(`↓ ${res.status}`, res.status >= 400 ? 'res error' : 'res');
+        if (res.status !== 401) throw new Error(`Expected 401, got ${res.status}`);
+    },
+
+    // ── Phase 2: Browse Inventory ──
+
+    'get-items': async () => {
+        if (!state.clientToken) throw new Error('Login client first');
+        if (!state.clientWs) throw new Error('Connect client WS first');
+        const wsPromise = waitForWsEvent('client', 'items_response', 15000);
+        const { status } = await api('GET', '/items/', null, state.clientToken);
+        if (status !== 200) throw new Error(`Expected 200, got ${status}`);
+
+        const msg = await wsPromise;
+        if (!Array.isArray(msg.payload.items)) throw new Error('items should be an array');
+        state.items = msg.payload.items;
+        state.selectedItems = msg.payload.items
+            .filter(i => i.stock >= 1)
+            .slice(0, 1)
+            .map(i => ({ itemId: i.itemId, quantity: 1, price: i.price }));
+        log(`  → ${msg.payload.items.length} items found, ${state.selectedItems.length} selected`, 'info');
+    },
+
+    // ── Phase 3: Create Orders ──
+
+    'create-order': async () => {
+        if (!state.clientToken) throw new Error('Login client first');
+        if (!state.clientWs) throw new Error('Connect client WS first');
+        if (state.selectedItems.length === 0) throw new Error('Browse inventory first');
+
+        const dest = document.getElementById('orderDest').value;
+        const wsPromise = waitForWsEvent('client', 'payment_intent_created', 20000);
+
+        const { status } = await api('POST', '/order/', {
+            itemList: state.selectedItems, destination: dest,
+        }, state.clientToken);
+        if (status !== 200) throw new Error(`Expected 200, got ${status}`);
+
+        const msg = await wsPromise;
+        state.lastOrderId = msg.payload.orderId;
+        state.lastClientSecret = msg.payload.clientSecret;
+        document.getElementById('statusOrderId').value = state.lastOrderId;
+        updateState();
+        log(`  → orderId: ${state.lastOrderId}`, 'info');
+    },
+
+    'confirm-order': async () => {
+        if (!state.lastOrderId) throw new Error('Create an order first');
+        if (!state.clientWs) throw new Error('Connect client WS first');
+
+        const paymentToken = `${state.lastClientSecret}-token`;
+        const wsPromise = waitForWsAny('client', ['payment_completed', 'payment_failed'], 35000);
+
+        const { status } = await api('PATCH', '/order/', {
+            orderId: state.lastOrderId,
+            status: 'order_confirmed',
+            data: { paymentToken },
+        }, state.clientToken);
+        if (status !== 200) throw new Error(`Expected 200, got ${status}`);
+
+        const msg = await wsPromise;
+        if (msg.payload.event === 'payment_completed') {
+            state.completedOrderIds.push(state.lastOrderId);
+            document.getElementById('completeOrderId').value = state.lastOrderId;
+            log(`  → ✔ payment_completed, txn=${msg.payload.transactionId}`, 'pass');
+        } else {
+            log(`  → ⚠ payment_failed: ${msg.payload.reason}`, 'fail');
+        }
+        updateState();
+    },
+
+    'create-order-full': async () => {
+        await actions['create-order']();
+        await actions['confirm-order']();
+    },
+
+    // ── Phase 4: View Orders ──
+
+    'view-orders': async () => {
+        if (!state.clientToken) throw new Error('Login client first');
+        if (!state.clientWs) throw new Error('Connect client WS first');
+
+        const wsPromise = waitForWsEvent('client', 'order_query_response', 20000);
+        const { status } = await api('GET', '/order/', null, state.clientToken);
+        if (status !== 200) throw new Error(`Expected 200, got ${status}`);
+
+        const msg = await wsPromise;
+        if (!Array.isArray(msg.payload.orders)) throw new Error('Expected orders array');
+        log(`  → ${msg.payload.orders.length} order(s) returned`, 'info');
+        msg.payload.orders.forEach(o => log(`    ${o.orderId} — ${o.status}`, 'info'));
+    },
+
+    // ── Phase 5: Delivery Status ──
+
+    'delivery-status': async () => {
+        if (!state.clientToken) throw new Error('Login client first');
+        if (!state.clientWs) throw new Error('Connect client WS first');
+        const orderId = document.getElementById('statusOrderId').value || state.completedOrderIds[0];
+        if (!orderId) throw new Error('No order ID available');
+
+        const wsPromise = waitForDeliveryStatus('client', orderId, 20000);
+        const { status } = await api('GET', `/deliveries/?orderId=${orderId}`, null, state.clientToken);
+        if (status !== 200) throw new Error(`Expected 200, got ${status}`);
+
+        const msg = await wsPromise;
+        log(`  → deliveryStatus: ${msg.payload.deliveryStatus}`, msg.payload.error ? 'fail' : 'info');
+    },
+
+    'delivery-status-unknown': async () => {
+        if (!state.clientToken) throw new Error('Login client first');
+        if (!state.clientWs) throw new Error('Connect client WS first');
+        const unknownId = `ORD-unknown-${Date.now()}`;
+
+        const wsPromise = waitForDeliveryStatus('client', unknownId, 20000);
+        const { status } = await api('GET', `/deliveries/?orderId=${unknownId}`, null, state.clientToken);
+        if (status !== 200) throw new Error(`Expected 200, got ${status}`);
+
+        const msg = await wsPromise;
+        if (msg.payload.deliveryStatus !== null) throw new Error('Expected null deliveryStatus');
+        if (!msg.payload.error) throw new Error('Expected error string');
+        log(`  → error: ${msg.payload.error}`, 'info');
+    },
+
+    'delivery-status-noauth': async () => {
+        const unknownId = `ORD-unknown-${Date.now()}`;
+        const { status } = await api('GET', `/deliveries/?orderId=${unknownId}`);
+        if (status !== 401) throw new Error(`Expected 401, got ${status}`);
+    },
+
+    // ── Phase 6: Assign Delivery Route ──
+
+    'delivery-assign-403': async () => {
+        if (!state.clientToken) throw new Error('Login client first');
+        const { status } = await api('POST', '/deliveries/', { count: 1 }, state.clientToken);
+        if (status !== 403) throw new Error(`Expected 403, got ${status}`);
+    },
+
+    'delivery-assign': async () => {
+        if (!state.driverToken) throw new Error('Login driver first');
+        if (!state.driverWs) throw new Error('Connect driver WS first');
+        const count = parseInt(document.getElementById('deliveryCount').value) || 1;
+
+        const wsPromise = waitForWsEvent('driver', 'driver_route', 45000);
+        const { status } = await api('POST', '/deliveries/', { count }, state.driverToken);
+        if (status !== 200) throw new Error(`Expected 200, got ${status}`);
+
+        const msg = await wsPromise;
+        if (!Array.isArray(msg.payload.route)) throw new Error('Expected route array');
+        log(`  → driver_route with ${msg.payload.route.length} stop(s)`, 'info');
+        msg.payload.route.forEach((s, i) => {
+            log(`    ${i + 1}. orderId=${s.orderId}  location=${s.location}`, 'info');
+        });
+        if (msg.payload.route.length > 0) {
+            state.routeOrderId = msg.payload.route[0].orderId;
+            document.getElementById('completeOrderId').value = state.routeOrderId;
+            updateState();
+        }
+    },
+
+    // ── Phase 7: Complete / Reject ──
+
+    'delivery-complete': async () => {
+        if (!state.driverToken) throw new Error('Login driver first');
+        if (!state.driverWs) throw new Error('Connect driver WS first');
+        const orderId = document.getElementById('completeOrderId').value || state.routeOrderId || state.completedOrderIds[0];
+        if (!orderId) throw new Error('No order ID available');
+        const sigUrl = document.getElementById('signatureUrl').value;
+
+        const wsPromise = waitForDeliveryStatus('driver', orderId, 20000);
+        const { status } = await api('PATCH', '/deliveries/', {
+            orderId, status: 'completed', signatureUrl: sigUrl,
+        }, state.driverToken);
+        if (status !== 200) throw new Error(`Expected 200, got ${status}`);
+
+        const msg = await wsPromise;
+        if (msg.payload.deliveryStatus !== 'delivered') throw new Error(`Expected delivered, got ${msg.payload.deliveryStatus}`);
+        log(`  → ✔ deliveryStatus = delivered`, 'pass');
+    },
+
+    'delivery-reject': async () => {
+        if (!state.driverToken) throw new Error('Login driver first');
+        if (!state.driverWs) throw new Error('Connect driver WS first');
+        state.rejectOrderId = `ORD-reject-${Date.now()}`;
+
+        const wsPromise = waitForDeliveryStatus('driver', state.rejectOrderId, 20000);
+        const { status } = await api('PATCH', '/deliveries/', {
+            orderId: state.rejectOrderId, status: 'rejected',
+        }, state.driverToken);
+        if (status !== 200) throw new Error(`Expected 200, got ${status}`);
+
+        const msg = await wsPromise;
+        if (msg.payload.deliveryStatus !== 'rejected') throw new Error(`Expected rejected, got ${msg.payload.deliveryStatus}`);
+        log(`  → ✔ deliveryStatus = rejected`, 'pass');
+    },
+
+    // ── Phase 8: Validation Errors ──
+
+    'val-client-role': async () => {
+        if (!state.clientToken) throw new Error('Login client first');
+        const { status } = await api('PATCH', '/deliveries/', {
+            orderId: 'any-order', status: 'completed',
+            signatureUrl: 'https://example.com/sig.jpg',
+        }, state.clientToken);
+        if (status !== 403) throw new Error(`Expected 403, got ${status}`);
+    },
+
+    'val-no-token': async () => {
+        const { status } = await api('PATCH', '/deliveries/', {
+            orderId: 'any-order', status: 'completed',
+            signatureUrl: 'https://example.com/sig.jpg',
+        });
+        if (status !== 401) throw new Error(`Expected 401, got ${status}`);
+    },
+
+    'val-no-orderid': async () => {
+        if (!state.driverToken) throw new Error('Login driver first');
+        const { status } = await api('PATCH', '/deliveries/', {
+            status: 'completed',
+            signatureUrl: 'https://example.com/sig.jpg',
+        }, state.driverToken);
+        if (status !== 400) throw new Error(`Expected 400, got ${status}`);
+    },
+
+    'val-invalid-status': async () => {
+        if (!state.driverToken) throw new Error('Login driver first');
+        const { status } = await api('PATCH', '/deliveries/', {
+            orderId: 'any-order', status: 'shipped',
+            signatureUrl: 'https://example.com/sig.jpg',
+        }, state.driverToken);
+        if (status !== 400) throw new Error(`Expected 400, got ${status}`);
+    },
+
+    'val-no-sig': async () => {
+        if (!state.driverToken) throw new Error('Login driver first');
+        const { status } = await api('PATCH', '/deliveries/', {
+            orderId: 'any-order', status: 'completed',
+        }, state.driverToken);
+        if (status !== 400) throw new Error(`Expected 400, got ${status}`);
+    },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Run action
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function runAction(btn) {
+    const action = btn.dataset.action;
+    const handler = actions[action];
+    if (!handler) { log(`Unknown action: ${action}`, 'fail'); return; }
+
+    btn.disabled = true;
+    markBtn(btn, 'running');
+    log(`\n◆ ${btn.querySelector('.path').textContent}`, 'test');
+
+    try {
+        await handler();
+        markBtn(btn, 'passed');
+        log('✔ PASSED', 'pass');
+        passCount++;
+    } catch (err) {
+        markBtn(btn, 'failed');
+        log(`✘ FAILED: ${err.message}`, 'fail');
+        failCount++;
+    } finally {
+        btn.disabled = false;
+        updateCounters();
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Run All Phases
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function runAllPhases() {
+    if (isRunningAll) return;
+    isRunningAll = true;
+    const btn = document.getElementById('btnRunAll');
+    btn.disabled = true;
+    btn.textContent = '⟳ Running…';
+
+    // Reset counters
+    passCount = 0; failCount = 0; updateCounters();
+    document.querySelectorAll('.action-btn').forEach(b => {
+        b.classList.remove('passed', 'failed', 'running');
+        b.querySelector('.result-icon').textContent = '';
+    });
+
+    // Regenerate usernames for clean run
+    const newTS = Date.now();
+    document.getElementById('clientUser').value = `ui_client_${newTS}`;
+    document.getElementById('driverUser').value = `ui_driver_${newTS}`;
+
+    // Phase sequence — each entry is the data-action value
+    const phases = [
+        // Phase 1: Auth
+        { section: 'Phase 1 — Authentication', actions: [
+            'signup-client', 'login-client', 'signup-driver', 'login-driver',
+            'ws-client', 'ws-driver',
+            'signup-dup', 'login-bad', 'no-token', 'bad-token',
+        ]},
+        // Phase 2: Browse Inventory
+        { section: 'Phase 2 — Browse Inventory', actions: ['get-items'] },
+        // Phase 3: Create Orders (run full cycle 3 times)
+        { section: 'Phase 3 — Create Orders', actions: [
+            'create-order-full', 'create-order-full', 'create-order-full',
+        ]},
+        // Phase 4: View Orders
+        { section: 'Phase 4 — View Orders', actions: ['view-orders'] },
+        // Phase 5: Delivery Status
+        { section: 'Phase 5 — Delivery Status', actions: [
+            'delivery-status', 'delivery-status-unknown', 'delivery-status-noauth',
+        ]},
+        // Phase 6: Assign Delivery Route
+        { section: 'Phase 6 — Assign Delivery Route', actions: [
+            'delivery-assign-403', 'delivery-assign',
+        ]},
+        // Phase 7: Complete / Reject
+        { section: 'Phase 7 — Complete / Reject Delivery', actions: [
+            'delivery-complete', 'delivery-reject',
+        ]},
+        // Phase 8: Validation Errors
+        { section: 'Phase 8 — Validation Errors', actions: [
+            'val-client-role', 'val-no-token', 'val-no-orderid',
+            'val-invalid-status', 'val-no-sig',
+        ]},
+    ];
+
+    for (const phase of phases) {
+        log(`\n${'═'.repeat(60)}`, 'section');
+        log(`  ${phase.section}`, 'section');
+        log(`${'═'.repeat(60)}`, 'section');
+
+        for (const actionName of phase.actions) {
+            // Find the button (for 'create-order-full' there's only one button but it runs multiple times)
+            const actionBtn = document.querySelector(`[data-action="${actionName}"]`);
+            if (actionBtn) {
+                await runAction(actionBtn);
+            } else {
+                // For composite actions not in DOM, call handler directly
+                log(`\n◆ ${actionName}`, 'test');
+                try {
+                    await actions[actionName]();
+                    log('✔ PASSED', 'pass');
+                    passCount++;
+                } catch (err) {
+                    log(`✘ FAILED: ${err.message}`, 'fail');
+                    failCount++;
+                }
+                updateCounters();
+            }
+
+            // Small delay between actions for readability
+            await new Promise(r => setTimeout(r, 300));
+        }
+
+        // Extra delay between phases for delivery status propagation
+        if (phase.section.includes('Phase 3') || phase.section.includes('Phase 5')) {
+            log('  ⏳ Waiting for async propagation…', 'info');
+            await new Promise(r => setTimeout(r, 2000));
+        }
+    }
+
+    // Summary
+    log(`\n${'═'.repeat(60)}`, 'section');
+    log(`  RESULTS: ${passCount} passed, ${failCount} failed, ${passCount + failCount} total`, failCount > 0 ? 'fail' : 'pass');
+    log(`${'═'.repeat(60)}`, 'section');
+
+    btn.disabled = false;
+    btn.textContent = '▶ Run All Phases';
+    isRunningAll = false;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Gateway health check
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function checkGateway() {
+    try {
+        const res = await fetch('/api/health');
+        const data = await res.json();
+        document.getElementById('gwDot').classList.add('connected');
+        document.getElementById('gwLabel').textContent = 'Gateway connected';
+        document.getElementById('gwBadge').textContent = `Gateway: OK`;
+    } catch {
+        document.getElementById('gwDot').classList.remove('connected');
+        document.getElementById('gwLabel').textContent = 'Gateway unreachable';
+        document.getElementById('gwBadge').textContent = `Gateway: unreachable`;
+    }
+}
+
+checkGateway();
+setInterval(checkGateway, 10000);
+updateState();
+</script>
+</body>
+</html>

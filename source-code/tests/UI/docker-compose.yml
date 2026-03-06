@@ -1,0 +1,13 @@
+services:
+  test-ui:
+    build: .
+    container_name: swiftlogistics-test-ui
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - GATEWAY_HOST=host.docker.internal
+      - GATEWAY_PORT=8081
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
